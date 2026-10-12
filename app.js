@@ -36,10 +36,11 @@ const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_BATCH_FILES = 100;
 
 // SECURITY LOCK
-// Keep false until Code.gs security and API compatibility
-// have been reviewed and tested.
+// Keep false until backend security and compatibility
+// have been verified.
 //
-// Changing this to true does not make an insecure backend safe.
+// Changing this to true does not make an insecure
+// backend safe.
 
 const ENABLE_REAL_UPLOADS = false;
 
@@ -435,8 +436,7 @@ async function routeSignedInUser() {
       : (auth.currentUser.email || "");
 
   // SECURITY LOCK:
-  // Do not make requests to the upload or gallery API until
-  // backend security and deployment compatibility are verified.
+  // No upload or gallery requests are made while this is false.
 
   if (!ENABLE_REAL_UPLOADS) {
     showPanel("upload-panel");
@@ -502,8 +502,7 @@ async function routeSignedInUser() {
       true
     );
   }
-}
-
+});
 // ============================================================
 // PHOTO SELECTION
 // ============================================================
@@ -608,25 +607,6 @@ function fileToBase64(file) {
 }
 
 // ============================================================
-// SHA-256 HASHING
-// ============================================================
-
-async function sha256Hex(file) {
-  const buffer = await file.arrayBuffer();
-
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    buffer
-  );
-
-  return Array.from(new Uint8Array(digest))
-    .map((byte) =>
-      byte.toString(16).padStart(2, "0")
-    )
-    .join("");
-}
-
-// ============================================================
 // UPLOAD SELECTED PHOTOS
 // ============================================================
 
@@ -653,7 +633,8 @@ $("upload-button").addEventListener("click", async () => {
     return;
   }
 
-  // Keep uploads disabled until the backend is verified.
+  // SECURITY LOCK:
+  // Keep uploads disabled until backend verification is complete.
 
   if (!ENABLE_REAL_UPLOADS) {
     showStatus(
@@ -706,6 +687,8 @@ $("upload-button").addEventListener("click", async () => {
   setBusy(true);
 
   let uploaded = 0;
+  let duplicates = 0;
+  let batchId = null;
 
   try {
     showStatus(
@@ -713,15 +696,17 @@ $("upload-button").addEventListener("click", async () => {
       "Starting a new upload attempt…"
     );
 
+    // Consent is required by the Apps Script backend.
     const started = await backendRequest({
-      action: "beginBatch"
+      action: "beginBatch",
+      consent: true
     });
 
-    const batchId = resultBatchId(started);
+    batchId = resultBatchId(started);
 
     if (!batchId) {
       throw new Error(
-        "Backend did not return a batch ID. No photos were uploaded."
+        "Backend did not return a batch ID."
       );
     }
 
@@ -733,26 +718,34 @@ $("upload-button").addEventListener("click", async () => {
         `Preparing image ${i + 1} of ${images.length}: ${file.name}`
       );
 
-      const [base64Data, photoHash] = await Promise.all([
-        fileToBase64(file),
-        sha256Hex(file)
-      ]);
+      const base64Data = await fileToBase64(file);
 
-      await backendRequest({
+      // Consent is required by the Apps Script backend.
+      const result = await backendRequest({
         action: "uploadPhoto",
         batchId,
+        consent: true,
         originalFilename: file.name,
         mimeType: file.type,
         fileSize: file.size,
-        base64Data,
-        photoHash
+        base64Data
       });
 
-      uploaded++;
+      // A duplicate must never count as a successful upload.
+      if (result.duplicate === true) {
+        duplicates++;
+      } else if (result.uploaded === true) {
+        uploaded++;
+      } else {
+        throw new Error(
+          `The backend did not confirm whether ${file.name} was uploaded.`
+        );
+      }
 
       showStatus(
         "upload-status",
-        `Uploaded ${uploaded} of ${images.length} image(s)…`
+        `Processed ${i + 1} of ${images.length} images. ` +
+        `${uploaded} uploaded, ${duplicates} duplicates rejected.`
       );
     }
 
@@ -766,20 +759,18 @@ $("upload-button").addEventListener("click", async () => {
       batchId
     });
 
+    // The server is the authority on qualification.
     const count = Number(
-      finished.newUniquePhotos ??
-      finished.new_unique_photos ??
-      finished.uniquePhotos ??
-      finished.count ??
-      uploaded
+      finished.newUniquePhotos
     );
 
-    const qualifies = Boolean(
-      finished.qualifies ||
-      finished.qualified ||
-      finished.eligible ||
-      count >= MINIMUM_PHOTOS
-    );
+    const qualifies = finished.qualifies === true;
+
+    if (!Number.isFinite(count)) {
+      throw new Error(
+        "The backend returned an invalid photo count."
+      );
+    }
 
     resetSelection();
 
@@ -788,7 +779,7 @@ $("upload-button").addEventListener("click", async () => {
 
       showStatus(
         "reveal-status",
-        `This attempt qualifies with ${count} new unique photo(s). You can reveal the gallery.`
+        `This attempt qualifies with ${count} new unique photos. You can reveal the gallery.`
       );
 
     } else {
@@ -796,7 +787,7 @@ $("upload-button").addEventListener("click", async () => {
 
       showStatus(
         "upload-status",
-        `This attempt has ${count} new unique photo(s). At least ${MINIMUM_PHOTOS} are required in one attempt. These photos cannot count toward another attempt.`,
+        `This attempt has ${count} new unique photos. At least ${MINIMUM_PHOTOS} are required in one attempt. Photos from an incomplete attempt cannot count toward another attempt.`,
         true
       );
     }
@@ -806,7 +797,8 @@ $("upload-button").addEventListener("click", async () => {
 
     showStatus(
       "upload-status",
-      `Upload stopped after ${uploaded} image(s). ${error.message} Check backend records before retrying.`,
+      `Upload stopped after ${uploaded} confirmed upload(s). ` +
+      `${error.message} Check the backend records before retrying.`,
       true
     );
 
@@ -817,202 +809,214 @@ $("upload-button").addEventListener("click", async () => {
 });
 
 // ============================================================
-// ONE-TIME GALLERY REVEAL
+// END OF PART 2
+// ============================================================
+// ============================================================
+// PART 3: GALLERY REVEAL, PRIVATE GALLERY & FINAL CHECKS
 // ============================================================
 
-$("reveal-button").addEventListener("click", async () => {
-  if (busy) return;
+// Reveal the private gallery after the user qualifies.
+if (revealButton) {
+  revealButton.addEventListener("click", async () => {
+    if (!currentUser) {
+      showStatus(
+        revealStatus,
+        "Please log in first.",
+        "error"
+      );
+      return;
+    }
 
-  if (!auth.currentUser) {
-    showStatus(
-      "reveal-status",
-      "Please sign in first.",
-      true
-    );
+    if (!consent.checked) {
+      showStatus(
+        revealStatus,
+        "Please provide consent before continuing.",
+        "error"
+      );
+      return;
+    }
 
-    return;
-  }
+    setBusy(revealButton, true, "Unlocking...");
 
-  if (!ENABLE_REAL_UPLOADS) {
-    showStatus(
-      "reveal-status",
-      "Gallery reveal is disabled until backend security and deployment are verified.",
-      true
-    );
+    try {
+      const result = await backendRequest({
+        action: "revealGallery",
+        consent: true
+      });
 
-    return;
-  }
+      if (!result || result.success !== true) {
+        throw new Error(
+          result?.message || "Unable to unlock the gallery."
+        );
+      }
 
-  const confirmed = window.confirm(
-    "Reveal the private gallery now? The backend will record this one-time reveal action."
-  );
+      showStatus(
+        revealStatus,
+        result.alreadyRevealed
+          ? "Your gallery is already unlocked!"
+          : "Gallery unlocked successfully!",
+        "success"
+      );
 
-  if (!confirmed) return;
+      await loadGallery();
 
-  setBusy(true);
+    } catch (error) {
+      console.error("Gallery reveal error:", error);
 
-  try {
-    await backendRequest({
-      action: "revealGallery",
-      consent: true
-    });
+      showStatus(
+        revealStatus,
+        error.message || "Unable to unlock the gallery.",
+        "error"
+      );
 
-    await loadGallery();
+    } finally {
+      setBusy(revealButton, false);
+    }
+  });
+}
 
-  } catch (error) {
-    console.error("Reveal error:", error);
 
-    showStatus(
-      "reveal-status",
-      error.message || "Could not reveal the gallery.",
-      true
-    );
-
-  } finally {
-    setBusy(false);
-  }
-});
-
-// ============================================================
-// LOAD PRIVATE GALLERY
-// ============================================================
-
+// Load the private gallery from the backend.
 async function loadGallery() {
-  if (!ENABLE_REAL_UPLOADS) {
-    showPanel("upload-panel");
-
-    showStatus(
-      "upload-status",
-      "Gallery access is disabled until the backend has been verified.",
-      true
-    );
-
+  if (!currentUser) {
     return;
   }
 
-  showPanel("gallery-panel");
+  if (!galleryPanel || !gallery) {
+    console.error("Gallery HTML elements are missing.");
+    return;
+  }
 
-  $("gallery").replaceChildren();
+  gallery.innerHTML = "";
 
-  const loading = document.createElement("p");
-  loading.textContent = "Loading your private gallery…";
-
-  $("gallery").appendChild(loading);
+  showStatus(
+    revealStatus,
+    "Loading your private gallery...",
+    "info"
+  );
 
   try {
     const result = await backendRequest({
       action: "listGallery"
     });
 
-    const items = resultGalleryItems(result);
+    if (!result || result.success !== true) {
+      throw new Error(
+        result?.message || "Unable to load the gallery."
+      );
+    }
 
-    $("gallery").replaceChildren();
+    const images = Array.isArray(result.images)
+      ? result.images
+      : [];
 
-    if (!items.length) {
-      const empty = document.createElement("p");
+    gallery.innerHTML = "";
 
-      empty.textContent =
-        "The gallery is unlocked, but no pictures are available yet.";
+    if (images.length === 0) {
+      const emptyMessage = document.createElement("p");
+      emptyMessage.textContent =
+        "Your private gallery is currently empty.";
 
-      $("gallery").appendChild(empty);
+      gallery.appendChild(emptyMessage);
 
+      showStatus(
+        revealStatus,
+        "Gallery unlocked, but no photos were found.",
+        "info"
+      );
+
+      galleryPanel.hidden = false;
       return;
     }
 
-    for (const item of items) {
-      const fileId =
-        item.id ||
-        item.fileId ||
-        item.file_id;
+    // Fetch each image through the authenticated backend.
+    for (const item of images) {
+      const card = document.createElement("div");
+      card.className = "gallery-item";
 
-      if (!fileId) continue;
-
-      const filename =
-        item.name ||
-        item.filename ||
-        item.originalFilename ||
-        "Gallery photo";
-
-      const figure = document.createElement("figure");
       const image = document.createElement("img");
-      const caption = document.createElement("figcaption");
-
-      image.alt = filename;
+      image.alt = item.name || "Private gallery photo";
       image.loading = "lazy";
-      image.decoding = "async";
 
-      caption.textContent = filename;
+      const caption = document.createElement("p");
+      caption.textContent = item.name || "Our memory";
 
-      figure.append(image, caption);
-      $("gallery").appendChild(figure);
+      card.appendChild(image);
+      card.appendChild(caption);
+      gallery.appendChild(card);
 
       try {
         const imageResult = await backendRequest({
           action: "getGalleryImage",
-          fileId
+          fileId: item.id
         });
 
-        const base64 =
-          imageResult.base64Data ||
-          imageResult.base64 ||
-          imageResult.data;
-
-        const mimeType =
-          imageResult.mimeType ||
-          imageResult.mime_type ||
-          item.mimeType ||
-          "image/jpeg";
-
-        if (!base64) {
-          throw new Error("No image data was returned.");
+        if (
+          !imageResult ||
+          imageResult.success !== true ||
+          !imageResult.base64
+        ) {
+          throw new Error(
+            imageResult?.message || "Unable to load this photo."
+          );
         }
 
-        image.src =
-          `data:${mimeType};base64,${base64}`;
+        const allowedMimeTypes = [
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "image/gif"
+        ];
 
-      } catch (error) {
+        const mimeType = allowedMimeTypes.includes(
+          imageResult.mimeType
+        )
+          ? imageResult.mimeType
+          : "image/jpeg";
+
+        image.src =
+          `data:${mimeType};base64,${imageResult.base64}`;
+
+      } catch (imageError) {
         console.error(
-          "Gallery image load failed:",
-          filename,
-          error
+          "Unable to load gallery image:",
+          item.id,
+          imageError
         );
 
-        figure.remove();
+        image.remove();
+
+        caption.textContent =
+          `${item.name || "Photo"} could not be loaded.`;
       }
     }
 
-    if (!$("gallery").children.length) {
-      const message = document.createElement("p");
+    galleryPanel.hidden = false;
 
-      message.textContent =
-        "Gallery images could not be loaded. Please try again later.";
-
-      $("gallery").appendChild(message);
-    }
+    showStatus(
+      revealStatus,
+      "Your private gallery is ready!",
+      "success"
+    );
 
   } catch (error) {
-    console.error("Gallery list failed:", error);
+    console.error("Gallery loading error:", error);
 
-    $("gallery").replaceChildren();
-
-    const message = document.createElement("p");
-
-    message.textContent =
-      `Could not load the private gallery: ${error.message}`;
-
-    $("gallery").appendChild(message);
+    showStatus(
+      revealStatus,
+      error.message || "Unable to load the gallery.",
+      "error"
+    );
   }
 }
 
+
 // ============================================================
-// HTML ELEMENT CHECK
+// FINAL HTML ELEMENT CHECK
 // ============================================================
 
 const requiredIds = [
   "auth-panel",
-  "upload-panel",
-  "reveal-panel",
-  "gallery-panel",
   "show-login",
   "show-register",
   "auth-form",
@@ -1026,6 +1030,7 @@ const requiredIds = [
   "auth-submit",
   "reset-password",
   "auth-status",
+  "upload-panel",
   "signed-in-as",
   "sign-out",
   "consent",
@@ -1033,18 +1038,30 @@ const requiredIds = [
   "selection-summary",
   "upload-button",
   "upload-status",
+  "reveal-panel",
   "reveal-button",
   "reveal-status",
+  "gallery-panel",
+  "letter",
   "gallery"
 ];
 
 const missingIds = requiredIds.filter(
-  (id) => !$(id)
+  (id) => !document.getElementById(id)
 );
 
-if (missingIds.length) {
+if (missingIds.length > 0) {
   console.error(
-    "index.html is missing required IDs:",
+    "Missing HTML elements in index.html:",
     missingIds
   );
+} else {
+  console.log(
+    "All required HTML elements were found."
+  );
 }
+
+
+// ============================================================
+// END OF PART 3
+// ============================================================
