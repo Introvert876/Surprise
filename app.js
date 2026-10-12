@@ -1,11 +1,3 @@
-/*
- * Kirti Photo Website
- * Firebase email/password authentication without email verification.
- *
- * Photo uploads and gallery reveal remain disabled until the backend
- * securely verifies Firebase ID tokens and enforces the upload rules.
- */
-
 import {
   initializeApp
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
@@ -20,12 +12,11 @@ import {
   updateProfile
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
-
 // ============================================
 // FIREBASE CONFIGURATION
 // ============================================
 
-const FIREBASE_CONFIG = {
+const firebaseConfig = {
   apiKey: "AIzaSyCRwg_4QZ1RTax0fR8YXHNUMKjTGlhoAFI",
   authDomain: "name-840f3.firebaseapp.com",
   projectId: "name-840f3",
@@ -35,7 +26,6 @@ const FIREBASE_CONFIG = {
   measurementId: "G-7NK90QTMCT"
 };
 
-
 // ============================================
 // GOOGLE APPS SCRIPT BACKEND
 // ============================================
@@ -43,12 +33,13 @@ const FIREBASE_CONFIG = {
 const BACKEND_URL =
   "https://script.google.com/macros/s/AKfycbwd5R1YTjVv1LfS8MxnFV69_sxosGRvxIyUR1sNUuWVnmAJHafcLASX-H96AaNicLU04g/exec";
 
+const MINIMUM_PHOTOS = 30;
 
 // ============================================
 // INITIALIZE FIREBASE
 // ============================================
 
-const app = initializeApp(FIREBASE_CONFIG);
+const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
 const $ = (id) => document.getElementById(id);
@@ -56,30 +47,17 @@ const $ = (id) => document.getElementById(id);
 let mode = "login";
 let selectedFiles = [];
 
-
 // ============================================
-// STATUS MESSAGES
+// STATUS HELPERS
 // ============================================
 
 function showStatus(id, message, isError = false) {
   const element = $(id);
-
-  if (!element) {
-    console.warn(`Status element not found: ${id}`);
-    return;
-  }
+  if (!element) return;
 
   element.textContent = message;
-
-  element.style.color = isError
-    ? "#a4234d"
-    : "#39764b";
+  element.style.color = isError ? "#a4234d" : "#39764b";
 }
-
-
-// ============================================
-// PAGE NAVIGATION
-// ============================================
 
 function showPanel(id) {
   [
@@ -89,16 +67,62 @@ function showPanel(id) {
     "gallery-panel"
   ].forEach((panelId) => {
     const element = $(panelId);
-
     if (element) {
-      element.classList.toggle(
-        "hidden",
-        panelId !== id
-      );
+      element.classList.toggle("hidden", panelId !== id);
     }
   });
 }
 
+// ============================================
+// BACKEND REQUEST HELPER
+// ============================================
+
+async function backendRequest(payload) {
+  if (!BACKEND_URL) {
+    throw new Error("Backend URL is not configured.");
+  }
+
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("Please sign in first.");
+  }
+
+  const idToken = await user.getIdToken();
+
+  /*
+   * This helper is prepared for the backend API.
+   * The current backend still rejects upload requests.
+   */
+
+  const response = await fetch(BACKEND_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      ...payload,
+      idToken
+    }),
+    redirect: "follow"
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Backend request failed with status ${response.status}.`
+    );
+  }
+
+  const result = await response.json();
+
+  if (!result.success) {
+    throw new Error(
+      result.error || "The backend rejected the request."
+    );
+  }
+
+  return result;
+}
 
 // ============================================
 // LOGIN / REGISTRATION MODE
@@ -107,35 +131,17 @@ function showPanel(id) {
 function setMode(nextMode) {
   mode = nextMode;
 
-  $("show-login").classList.toggle(
-    "active",
-    mode === "login"
-  );
+  $("show-login").classList.toggle("active", mode === "login");
+  $("show-register").classList.toggle("active", mode === "register");
 
-  $("show-register").classList.toggle(
-    "active",
-    mode === "register"
-  );
-
-  $("name-wrap").classList.toggle(
-    "hidden",
-    mode !== "register"
-  );
-
-  $("confirm-wrap").classList.toggle(
-    "hidden",
-    mode !== "register"
-  );
+  $("name-wrap").classList.toggle("hidden", mode !== "register");
+  $("confirm-wrap").classList.toggle("hidden", mode !== "register");
 
   $("password").autocomplete =
-    mode === "login"
-      ? "current-password"
-      : "new-password";
+    mode === "login" ? "current-password" : "new-password";
 
   $("auth-submit").textContent =
-    mode === "login"
-      ? "Sign in ❤️"
-      : "Create account ❤️";
+    mode === "login" ? "Sign in ❤️" : "Create account ❤️";
 
   $("auth-note").textContent =
     mode === "login"
@@ -145,17 +151,11 @@ function setMode(nextMode) {
   showStatus("auth-status", "");
 }
 
-$("show-login").addEventListener("click", () => {
-  setMode("login");
-});
-
-$("show-register").addEventListener("click", () => {
-  setMode("register");
-});
-
+$("show-login").addEventListener("click", () => setMode("login"));
+$("show-register").addEventListener("click", () => setMode("register"));
 
 // ============================================
-// CREATE ACCOUNT / SIGN IN
+// REGISTER / SIGN IN
 // ============================================
 
 $("auth-form").addEventListener("submit", async (event) => {
@@ -163,21 +163,17 @@ $("auth-form").addEventListener("submit", async (event) => {
 
   const email = $("email").value.trim();
   const password = $("password").value;
-  const submitButton = $("auth-submit");
 
-  submitButton.disabled = true;
-  showStatus("auth-status", "");
+  $("auth-submit").disabled = true;
 
   try {
     if (mode === "register") {
       const name = $("display-name").value.trim();
-      const confirmPassword = $("confirm-password").value;
 
-      if (password !== confirmPassword) {
+      if (password !== $("confirm-password").value) {
         throw new Error("Passwords do not match.");
       }
 
-      // Create the account without sending a verification email.
       const credential =
         await createUserWithEmailAndPassword(
           auth,
@@ -185,27 +181,23 @@ $("auth-form").addEventListener("submit", async (event) => {
           password
         );
 
-      // Save the display name.
       if (name) {
         await updateProfile(credential.user, {
           displayName: name
         });
       }
 
-      // Firebase automatically signs in the newly created user.
       $("signed-in-as").textContent =
         credential.user.email || email;
 
-      // Navigate to the upload page.
       showPanel("upload-panel");
 
       showStatus(
         "upload-status",
-        "Account created successfully. Welcome!"
+        "Account created successfully!"
       );
 
     } else {
-      // Sign in without requiring email verification.
       const credential =
         await signInWithEmailAndPassword(
           auth,
@@ -216,7 +208,6 @@ $("auth-form").addEventListener("submit", async (event) => {
       $("signed-in-as").textContent =
         credential.user.email || email;
 
-      // Navigate to the upload page.
       showPanel("upload-panel");
 
       showStatus(
@@ -228,45 +219,19 @@ $("auth-form").addEventListener("submit", async (event) => {
   } catch (error) {
     console.error("Authentication error:", error);
 
-    const messages = {
-      "auth/email-already-in-use":
-        "An account already exists for this email. Please sign in instead.",
-
-      "auth/invalid-email":
-        "Please enter a valid email address.",
-
-      "auth/weak-password":
-        "Please choose a stronger password with at least 6 characters.",
-
-      "auth/invalid-credential":
-        "Email or password is incorrect. Please try again.",
-
-      "auth/user-disabled":
-        "This account has been disabled.",
-
-      "auth/too-many-requests":
-        "Too many attempts. Please wait and try again.",
-
-      "auth/network-request-failed":
-        "Network error. Check your internet connection and try again."
-    };
-
     showStatus(
       "auth-status",
-      messages[error.code] ||
-        error.message ||
-        "Authentication failed.",
+      error.message || "Authentication failed.",
       true
     );
 
   } finally {
-    submitButton.disabled = false;
+    $("auth-submit").disabled = false;
   }
 });
 
-
 // ============================================
-// FORGOT PASSWORD
+// PASSWORD RESET
 // ============================================
 
 $("reset-password").addEventListener("click", async () => {
@@ -278,7 +243,6 @@ $("reset-password").addEventListener("click", async () => {
       "Enter your email address first.",
       true
     );
-
     return;
   }
 
@@ -287,21 +251,17 @@ $("reset-password").addEventListener("click", async () => {
 
     showStatus(
       "auth-status",
-      "If an account exists for that email, a password reset email has been sent."
+      "If the account exists, a password reset email has been sent."
     );
 
   } catch (error) {
-    console.error("Password reset error:", error);
-
     showStatus(
       "auth-status",
-      error.message ||
-        "Could not send the password reset email.",
+      error.message || "Could not send the reset email.",
       true
     );
   }
 });
-
 
 // ============================================
 // SIGN OUT
@@ -317,82 +277,56 @@ $("sign-out").addEventListener("click", async () => {
       $("photos").value = "";
     }
 
-    if ($("selection-summary")) {
-      $("selection-summary").textContent = "";
-    }
-
     showPanel("auth-panel");
 
-    showStatus(
-      "auth-status",
-      "You have been signed out."
-    );
-
   } catch (error) {
-    console.error("Sign-out error:", error);
-
     showStatus(
       "upload-status",
-      "Could not sign out. Please try again.",
+      "Could not sign out.",
       true
     );
   }
 });
 
-
 // ============================================
-// RESTORE LOGIN SESSION
+// RESTORE AUTHENTICATION SESSION
 // ============================================
 
 onAuthStateChanged(auth, (user) => {
   if (user) {
-    if ($("signed-in-as")) {
-      $("signed-in-as").textContent =
-        user.email || "Signed in";
-    }
-
-    // Automatically open the upload page after login
-    // or when a signed-in user refreshes the website.
+    $("signed-in-as").textContent = user.email || "";
     showPanel("upload-panel");
-
   } else {
     showPanel("auth-panel");
   }
 });
-
 
 // ============================================
 // PHOTO SELECTION
 // ============================================
 
 $("photos").addEventListener("change", () => {
-  selectedFiles = Array.from(
-    $("photos").files || []
-  );
+  selectedFiles = Array.from($("photos").files || []);
 
   const images = selectedFiles.filter((file) =>
     file.type.startsWith("image/")
   );
 
   const totalBytes = images.reduce(
-    (sum, file) => sum + file.size,
+    (total, file) => total + file.size,
     0
   );
 
   $("selection-summary").textContent =
     `${images.length} image(s) selected · ` +
-    `${(totalBytes / 1024 / 1024).toFixed(1)} MB total. ` +
-    "Previously uploaded duplicates must be rejected by the backend.";
+    `${(totalBytes / 1024 / 1024).toFixed(1)} MB total.`;
 
-  $("upload-button").disabled = !(
-    images.length > 0 &&
-    $("consent").checked
-  );
+  $("upload-button").disabled =
+    !(images.length > 0 && $("consent").checked);
 });
 
-
 // ============================================
-// PHOTO UPLOAD CONSENT
+// CONSENT
 // ============================================
 
 $("consent").addEventListener("change", () => {
@@ -400,15 +334,12 @@ $("consent").addEventListener("change", () => {
     file.type.startsWith("image/")
   );
 
-  $("upload-button").disabled = !(
-    hasImages &&
-    $("consent").checked
-  );
+  $("upload-button").disabled =
+    !(hasImages && $("consent").checked);
 });
 
-
 // ============================================
-// PHOTO UPLOAD
+// UPLOAD SELECTED PHOTOS
 // ============================================
 
 $("upload-button").addEventListener("click", async () => {
@@ -418,17 +349,15 @@ $("upload-button").addEventListener("click", async () => {
       "Please sign in first.",
       true
     );
-
     return;
   }
 
   if (!$("consent").checked) {
     showStatus(
       "upload-status",
-      "Please agree to the photo upload terms first.",
+      "Please agree to the photo upload terms.",
       true
     );
-
     return;
   }
 
@@ -442,40 +371,31 @@ $("upload-button").addEventListener("click", async () => {
       "Choose image files first.",
       true
     );
-
     return;
   }
 
-  if (!BACKEND_URL) {
-    showStatus(
-      "upload-status",
-      "Backend URL is not configured.",
-      true
-    );
-
-    return;
-  }
-
-  // Uploading remains disabled until the backend API
-  // securely verifies Firebase ID tokens, validates consent,
-  // detects duplicates, and enforces the batch requirements.
+  /*
+   * Do not send images yet.
+   *
+   * The current Apps Script backend does not yet have a
+   * production-ready upload flow and one-time reveal API.
+   */
 
   showStatus(
     "upload-status",
-    "Your account is ready. Photo uploads are not enabled yet because the secure upload API must be implemented first.",
+    "Your account and backend configuration are ready. Photo uploads will be enabled after the secure upload and batch APIs are verified.",
     true
   );
 });
 
-
 // ============================================
-// ONE-TIME GALLERY REVEAL
+// ONE-TIME REVEAL PLACEHOLDER
 // ============================================
 
 $("reveal-button").addEventListener("click", () => {
   showStatus(
     "reveal-status",
-    "Gallery reveal is not enabled yet. The backend must enforce the one-time reveal rule first.",
+    "Gallery reveal is not enabled until the backend can securely enforce one-time access.",
     true
   );
 });
