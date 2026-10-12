@@ -401,7 +401,6 @@ $("sign-out").addEventListener("click", async () => {
     );
   }
 });
-
 // ============================================================
 // RESTORE AUTHENTICATION SESSION
 // ============================================================
@@ -436,7 +435,7 @@ async function routeSignedInUser() {
       : (auth.currentUser.email || "");
 
   // SECURITY LOCK:
-  // No upload or gallery requests are made while this is false.
+  // Keep uploads and gallery access disabled during verification.
 
   if (!ENABLE_REAL_UPLOADS) {
     showPanel("upload-panel");
@@ -447,7 +446,6 @@ async function routeSignedInUser() {
     );
 
     refreshUploadButton();
-
     return;
   }
 
@@ -502,7 +500,8 @@ async function routeSignedInUser() {
       true
     );
   }
-});
+}
+
 // ============================================================
 // PHOTO SELECTION
 // ============================================================
@@ -619,7 +618,6 @@ $("upload-button").addEventListener("click", async () => {
       "Please sign in first.",
       true
     );
-
     return;
   }
 
@@ -629,12 +627,11 @@ $("upload-button").addEventListener("click", async () => {
       "Please agree to the photo upload terms.",
       true
     );
-
     return;
   }
 
   // SECURITY LOCK:
-  // Keep uploads disabled until backend verification is complete.
+  // Real uploads remain disabled until backend verification.
 
   if (!ENABLE_REAL_UPLOADS) {
     showStatus(
@@ -642,7 +639,6 @@ $("upload-button").addEventListener("click", async () => {
       "Uploads are disabled until backend security and deployment tests are complete. No photos were uploaded.",
       true
     );
-
     return;
   }
 
@@ -656,7 +652,6 @@ $("upload-button").addEventListener("click", async () => {
       "Choose image files first.",
       true
     );
-
     return;
   }
 
@@ -666,7 +661,6 @@ $("upload-button").addEventListener("click", async () => {
       `Choose no more than ${MAX_BATCH_FILES} images per attempt.`,
       true
     );
-
     return;
   }
 
@@ -677,10 +671,9 @@ $("upload-button").addEventListener("click", async () => {
   if (oversized) {
     showStatus(
       "upload-status",
-      `${oversized.name} exceeds the 5 MB per-image limit. Remove it and try again.`,
+      `${oversized.name} exceeds the 5 MB limit. Remove it and try again.`,
       true
     );
-
     return;
   }
 
@@ -688,21 +681,19 @@ $("upload-button").addEventListener("click", async () => {
 
   let uploaded = 0;
   let duplicates = 0;
-  let batchId = null;
 
   try {
     showStatus(
       "upload-status",
-      "Starting a new upload attempt…"
+      "Starting a new upload attempt..."
     );
 
-    // Consent is required by the Apps Script backend.
     const started = await backendRequest({
       action: "beginBatch",
       consent: true
     });
 
-    batchId = resultBatchId(started);
+    const batchId = resultBatchId(started);
 
     if (!batchId) {
       throw new Error(
@@ -720,7 +711,6 @@ $("upload-button").addEventListener("click", async () => {
 
       const base64Data = await fileToBase64(file);
 
-      // Consent is required by the Apps Script backend.
       const result = await backendRequest({
         action: "uploadPhoto",
         batchId,
@@ -731,11 +721,12 @@ $("upload-button").addEventListener("click", async () => {
         base64Data
       });
 
-      // A duplicate must never count as a successful upload.
       if (result.duplicate === true) {
         duplicates++;
+
       } else if (result.uploaded === true) {
         uploaded++;
+
       } else {
         throw new Error(
           `The backend did not confirm whether ${file.name} was uploaded.`
@@ -751,7 +742,7 @@ $("upload-button").addEventListener("click", async () => {
 
     showStatus(
       "upload-status",
-      "Checking this attempt…"
+      "Checking this attempt..."
     );
 
     const finished = await backendRequest({
@@ -759,11 +750,8 @@ $("upload-button").addEventListener("click", async () => {
       batchId
     });
 
-    // The server is the authority on qualification.
-    const count = Number(
-      finished.newUniquePhotos
-    );
-
+    // Qualification is determined by the backend.
+    const count = Number(finished.newUniquePhotos);
     const qualifies = finished.qualifies === true;
 
     if (!Number.isFinite(count)) {
@@ -798,7 +786,7 @@ $("upload-button").addEventListener("click", async () => {
     showStatus(
       "upload-status",
       `Upload stopped after ${uploaded} confirmed upload(s). ` +
-      `${error.message} Check the backend records before retrying.`,
+      `${error.message} Check backend records before retrying.`,
       true
     );
 
@@ -810,99 +798,141 @@ $("upload-button").addEventListener("click", async () => {
 
 // ============================================================
 // END OF PART 2
+// ======// ============================================================
+// PART 3: GALLERY REVEAL AND PRIVATE GALLERY
 // ============================================================
+
 // ============================================================
-// PART 3: GALLERY REVEAL, PRIVATE GALLERY & FINAL CHECKS
+// ONE-TIME GALLERY REVEAL
 // ============================================================
 
-// Reveal the private gallery after the user qualifies.
-if (revealButton) {
-  revealButton.addEventListener("click", async () => {
-    if (!currentUser) {
-      showStatus(
-        revealStatus,
-        "Please log in first.",
-        "error"
-      );
-      return;
-    }
+$("reveal-button").addEventListener("click", async () => {
+  if (busy) return;
 
-    if (!consent.checked) {
-      showStatus(
-        revealStatus,
-        "Please provide consent before continuing.",
-        "error"
-      );
-      return;
-    }
+  if (!auth.currentUser) {
+    showStatus(
+      "reveal-status",
+      "Please sign in first.",
+      true
+    );
 
-    setBusy(revealButton, true, "Unlocking...");
-
-    try {
-      const result = await backendRequest({
-        action: "revealGallery",
-        consent: true
-      });
-
-      if (!result || result.success !== true) {
-        throw new Error(
-          result?.message || "Unable to unlock the gallery."
-        );
-      }
-
-      showStatus(
-        revealStatus,
-        result.alreadyRevealed
-          ? "Your gallery is already unlocked!"
-          : "Gallery unlocked successfully!",
-        "success"
-      );
-
-      await loadGallery();
-
-    } catch (error) {
-      console.error("Gallery reveal error:", error);
-
-      showStatus(
-        revealStatus,
-        error.message || "Unable to unlock the gallery.",
-        "error"
-      );
-
-    } finally {
-      setBusy(revealButton, false);
-    }
-  });
-}
-
-
-// Load the private gallery from the backend.
-async function loadGallery() {
-  if (!currentUser) {
     return;
   }
 
-  if (!galleryPanel || !gallery) {
-    console.error("Gallery HTML elements are missing.");
+  // SECURITY LOCK:
+  // Gallery access remains disabled until verification is complete.
+
+  if (!ENABLE_REAL_UPLOADS) {
+    showStatus(
+      "reveal-status",
+      "Gallery reveal is disabled until backend security and deployment are verified.",
+      true
+    );
+
     return;
   }
 
-  gallery.innerHTML = "";
+  if (!$("consent").checked) {
+    showStatus(
+      "reveal-status",
+      "Please agree before revealing the gallery.",
+      true
+    );
 
-  showStatus(
-    revealStatus,
-    "Loading your private gallery...",
-    "info"
+    return;
+  }
+
+  const confirmed = window.confirm(
+    "Reveal the private gallery now? This action will be recorded."
   );
+
+  if (!confirmed) return;
+
+  setBusy(true);
+
+  try {
+    const result = await backendRequest({
+      action: "revealGallery",
+      consent: true
+    });
+
+    if (result.revealed !== true) {
+      throw new Error(
+        result.message || "Unable to unlock the gallery."
+      );
+    }
+
+    showStatus(
+      "reveal-status",
+      result.alreadyRevealed
+        ? "Your gallery is already unlocked!"
+        : "Gallery unlocked successfully!"
+    );
+
+    await loadGallery();
+
+  } catch (error) {
+    console.error("Gallery reveal error:", error);
+
+    showStatus(
+      "reveal-status",
+      error.message || "Unable to unlock the gallery.",
+      true
+    );
+
+  } finally {
+    setBusy(false);
+  }
+});
+
+// ============================================================
+// LOAD PRIVATE GALLERY
+// ============================================================
+
+async function loadGallery() {
+  if (!auth.currentUser) {
+    showPanel("auth-panel");
+    return;
+  }
+
+  // Never request gallery data while the security lock is active.
+
+  if (!ENABLE_REAL_UPLOADS) {
+    showPanel("upload-panel");
+
+    showStatus(
+      "upload-status",
+      "Gallery access is disabled until the backend has been verified.",
+      true
+    );
+
+    return;
+  }
+
+  showPanel("gallery-panel");
+
+  const gallery = $("gallery");
+
+  if (!gallery) {
+    console.error("Gallery HTML element is missing.");
+    return;
+  }
+
+  gallery.replaceChildren();
+
+  const loading = document.createElement("p");
+  loading.textContent = "Loading your private gallery...";
+
+  gallery.appendChild(loading);
 
   try {
     const result = await backendRequest({
       action: "listGallery"
     });
 
-    if (!result || result.success !== true) {
+    if (result.success !== true) {
       throw new Error(
-        result?.message || "Unable to load the gallery."
+        result.message || "Unable to load the gallery."
       );
     }
 
@@ -910,39 +940,43 @@ async function loadGallery() {
       ? result.images
       : [];
 
-    gallery.innerHTML = "";
+    gallery.replaceChildren();
 
     if (images.length === 0) {
       const emptyMessage = document.createElement("p");
+
       emptyMessage.textContent =
-        "Your private gallery is currently empty.";
+        "The gallery is unlocked, but no photos were found.";
 
       gallery.appendChild(emptyMessage);
 
       showStatus(
-        revealStatus,
-        "Gallery unlocked, but no photos were found.",
-        "info"
+        "reveal-status",
+        "Gallery unlocked, but no photos were found."
       );
 
-      galleryPanel.hidden = false;
       return;
     }
 
-    // Fetch each image through the authenticated backend.
+    // Request each image through the authenticated backend.
     for (const item of images) {
+      if (!item.id) continue;
+
       const card = document.createElement("div");
       card.className = "gallery-item";
 
       const image = document.createElement("img");
+
       image.alt = item.name || "Private gallery photo";
       image.loading = "lazy";
+      image.decoding = "async";
 
       const caption = document.createElement("p");
       caption.textContent = item.name || "Our memory";
 
       card.appendChild(image);
       card.appendChild(caption);
+
       gallery.appendChild(card);
 
       try {
@@ -952,12 +986,12 @@ async function loadGallery() {
         });
 
         if (
-          !imageResult ||
           imageResult.success !== true ||
+          typeof imageResult.base64 !== "string" ||
           !imageResult.base64
         ) {
           throw new Error(
-            imageResult?.message || "Unable to load this photo."
+            imageResult.message || "Unable to load this photo."
           );
         }
 
@@ -991,26 +1025,27 @@ async function loadGallery() {
       }
     }
 
-    galleryPanel.hidden = false;
-
     showStatus(
-      revealStatus,
-      "Your private gallery is ready!",
-      "success"
+      "reveal-status",
+      "Your private gallery is ready!"
     );
 
   } catch (error) {
     console.error("Gallery loading error:", error);
 
+    gallery.replaceChildren();
+
     showStatus(
-      revealStatus,
+      "reveal-status",
       error.message || "Unable to load the gallery.",
-      "error"
+      true
     );
   }
 }
 
-
+// ============================================================
+// END OF PART 3
+// ============================================================
 // ============================================================
 // FINAL HTML ELEMENT CHECK
 // ============================================================
@@ -1061,7 +1096,6 @@ if (missingIds.length > 0) {
   );
 }
 
-
 // ============================================================
-// END OF PART 3
+// END OF PART 4
 // ============================================================
