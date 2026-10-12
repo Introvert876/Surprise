@@ -25,7 +25,7 @@ const firebaseConfig = {
 };
 
 // ============================================================
-// GOOGLE APPS SCRIPT BACKEND
+// BACKEND CONFIGURATION
 // ============================================================
 
 const BACKEND_URL =
@@ -35,14 +35,9 @@ const MINIMUM_PHOTOS = 30;
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_BATCH_FILES = 100;
 
-// SECURITY LOCK
-// Keep false until backend security and compatibility
-// have been verified.
-//
-// Changing this to true does not make an insecure
-// backend safe.
-
-const ENABLE_REAL_UPLOADS = true;
+// Keep false until the backend security and upload contract
+// have been tested.
+const ENABLE_REAL_UPLOADS = false;
 
 // ============================================================
 // INITIALIZE FIREBASE
@@ -58,12 +53,11 @@ let selectedFiles = [];
 let busy = false;
 
 // ============================================================
-// STATUS HELPERS
+// STATUS AND UI HELPERS
 // ============================================================
 
 function showStatus(id, message, error = false) {
   const element = $(id);
-
   if (!element) return;
 
   element.textContent = message;
@@ -78,7 +72,6 @@ function showPanel(id) {
     "gallery-panel"
   ].forEach((panelId) => {
     const element = $(panelId);
-
     if (element) {
       element.classList.toggle("hidden", panelId !== id);
     }
@@ -109,19 +102,20 @@ function refreshUploadButton() {
     file.type.startsWith("image/")
   );
 
-  button.disabled = busy || !hasImages || !consent.checked;
+  button.disabled =
+    busy || !hasImages || !consent.checked;
 }
 
 function friendlyError(error) {
   const messages = {
     "auth/email-already-in-use":
-      "An account already exists for this email. Please sign in.",
+      "An account already exists for this email.",
 
     "auth/invalid-email":
-      "Please enter a valid email address.",
+      "Enter a valid email address.",
 
     "auth/weak-password":
-      "Choose a stronger password with at least 6 characters.",
+      "Use a password with at least 6 characters.",
 
     "auth/invalid-credential":
       "Email or password is incorrect.",
@@ -133,7 +127,7 @@ function friendlyError(error) {
       "Email or password is incorrect.",
 
     "auth/too-many-requests":
-      "Too many attempts. Please wait and try again.",
+      "Too many attempts. Wait and try again.",
 
     "auth/network-request-failed":
       "Network error. Check your internet connection."
@@ -182,7 +176,7 @@ async function backendRequest(payload) {
     console.error("Backend network error:", error);
 
     throw new Error(
-      "Could not reach Apps Script. Check the deployment and access settings."
+      "Could not reach Apps Script. Check deployment and access settings."
     );
   }
 
@@ -223,19 +217,8 @@ function resultBatchId(result) {
   );
 }
 
-function resultGalleryItems(result) {
-  const items =
-    result.files ||
-    result.images ||
-    result.gallery ||
-    result.items ||
-    [];
-
-  return Array.isArray(items) ? items : [];
-}
-
 // ============================================================
-// LOGIN / REGISTRATION MODE
+// AUTHENTICATION MODE
 // ============================================================
 
 function setMode(nextMode) {
@@ -273,8 +256,8 @@ function setMode(nextMode) {
 
   $("auth-note").textContent =
     mode === "login"
-      ? "Sign in to continue to the private photo experience."
-      : "Create an account to continue to the photo upload page.";
+      ? "Sign in to continue."
+      : "Create an account to continue.";
 
   showStatus("auth-status", "");
 }
@@ -288,7 +271,7 @@ $("show-register").addEventListener("click", () => {
 });
 
 // ============================================================
-// REGISTER / SIGN IN
+// REGISTER AND LOGIN
 // ============================================================
 
 $("auth-form").addEventListener("submit", async (event) => {
@@ -321,6 +304,7 @@ $("auth-form").addEventListener("submit", async (event) => {
           displayName: name
         });
       }
+
     } else {
       await signInWithEmailAndPassword(
         auth,
@@ -358,7 +342,6 @@ $("reset-password").addEventListener("click", async () => {
       "Enter your email address first.",
       true
     );
-
     return;
   }
 
@@ -388,7 +371,6 @@ $("sign-out").addEventListener("click", async () => {
     await signOut(auth);
 
     resetSelection();
-
     showPanel("auth-panel");
 
   } catch (error) {
@@ -401,8 +383,9 @@ $("sign-out").addEventListener("click", async () => {
     );
   }
 });
+
 // ============================================================
-// RESTORE AUTHENTICATION SESSION
+// AUTHENTICATION STATE
 // ============================================================
 
 onAuthStateChanged(auth, async (user) => {
@@ -412,15 +395,16 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
-  $("signed-in-as").textContent = user.displayName
-    ? `${user.displayName} (${user.email || ""})`
-    : (user.email || "");
+  $("signed-in-as").textContent =
+    user.displayName
+      ? `${user.displayName} (${user.email || ""})`
+      : (user.email || "");
 
   await routeSignedInUser();
 });
 
 // ============================================================
-// ROUTE SIGNED-IN USER
+// ROUTE AUTHENTICATED USERS
 // ============================================================
 
 async function routeSignedInUser() {
@@ -434,15 +418,12 @@ async function routeSignedInUser() {
       ? `${auth.currentUser.displayName} (${auth.currentUser.email || ""})`
       : (auth.currentUser.email || "");
 
-  // SECURITY LOCK:
-  // Keep uploads and gallery access disabled during verification.
-
   if (!ENABLE_REAL_UPLOADS) {
     showPanel("upload-panel");
 
     showStatus(
       "upload-status",
-      "Sign-in works. Photo uploads and gallery access are temporarily disabled while backend security and deployment are verified."
+      "Sign-in is available. Uploads and gallery access are disabled while backend security and compatibility are being checked."
     );
 
     refreshUploadButton();
@@ -484,7 +465,7 @@ async function routeSignedInUser() {
 
       showStatus(
         "upload-status",
-        "Choose new photos to begin a new attempt."
+        "Choose new photos to begin an attempt."
       );
     }
 
@@ -495,13 +476,15 @@ async function routeSignedInUser() {
 
     showStatus(
       "upload-status",
-      "Could not verify backend status. Uploads and gallery access remain unavailable. " +
-      error.message,
+      "Could not verify backend status. " + error.message,
       true
     );
   }
 }
 
+// ============================================================
+// END OF PART 1
+// ============================================================
 // ============================================================
 // PHOTO SELECTION
 // ============================================================
@@ -618,6 +601,7 @@ $("upload-button").addEventListener("click", async () => {
       "Please sign in first.",
       true
     );
+
     return;
   }
 
@@ -627,11 +611,12 @@ $("upload-button").addEventListener("click", async () => {
       "Please agree to the photo upload terms.",
       true
     );
+
     return;
   }
 
   // SECURITY LOCK:
-  // Real uploads remain disabled until backend verification.
+  // Keep uploads disabled until backend verification is complete.
 
   if (!ENABLE_REAL_UPLOADS) {
     showStatus(
@@ -639,6 +624,7 @@ $("upload-button").addEventListener("click", async () => {
       "Uploads are disabled until backend security and deployment tests are complete. No photos were uploaded.",
       true
     );
+
     return;
   }
 
@@ -652,6 +638,7 @@ $("upload-button").addEventListener("click", async () => {
       "Choose image files first.",
       true
     );
+
     return;
   }
 
@@ -661,6 +648,7 @@ $("upload-button").addEventListener("click", async () => {
       `Choose no more than ${MAX_BATCH_FILES} images per attempt.`,
       true
     );
+
     return;
   }
 
@@ -671,9 +659,10 @@ $("upload-button").addEventListener("click", async () => {
   if (oversized) {
     showStatus(
       "upload-status",
-      `${oversized.name} exceeds the 5 MB limit. Remove it and try again.`,
+      `${oversized.name} exceeds the 5 MB per-image limit. Remove it and try again.`,
       true
     );
+
     return;
   }
 
@@ -681,19 +670,21 @@ $("upload-button").addEventListener("click", async () => {
 
   let uploaded = 0;
   let duplicates = 0;
+  let batchId = null;
 
   try {
     showStatus(
       "upload-status",
-      "Starting a new upload attempt..."
+      "Starting a new upload attempt…"
     );
 
+    // Consent is required by the Apps Script backend.
     const started = await backendRequest({
       action: "beginBatch",
       consent: true
     });
 
-    const batchId = resultBatchId(started);
+    batchId = resultBatchId(started);
 
     if (!batchId) {
       throw new Error(
@@ -701,48 +692,120 @@ $("upload-button").addEventListener("click", async () => {
       );
     }
 
-    for (let i = 0; i < images.length; i++) {
-      const file = images[i];
+    // Five photos per request, with at most two requests running at once.
+    // NOTE: Five 5 MB images can create a very large base64 payload.
+    // If requests fail due to payload limits, reduce the per-image size
+    // or the group size.
+    const GROUP_SIZE = 5;
+    const MAX_PARALLEL_GROUPS = 2;
+    const groups = [];
 
-      showStatus(
-        "upload-status",
-        `Preparing image ${i + 1} of ${images.length}: ${file.name}`
-      );
+    for (let start = 0; start < images.length; start += GROUP_SIZE) {
+      groups.push(images.slice(start, start + GROUP_SIZE));
+    }
 
-      const base64Data = await fileToBase64(file);
+    let nextGroupIndex = 0;
+    let completedGroups = 0;
+    let failure = null;
 
-      const result = await backendRequest({
-        action: "uploadPhoto",
-        batchId,
-        consent: true,
-        originalFilename: file.name,
-        mimeType: file.type,
-        fileSize: file.size,
-        base64Data
-      });
+    async function uploadNextGroup() {
+      while (true) {
+        if (failure) return;
 
-      if (result.duplicate === true) {
-        duplicates++;
+        const groupIndex = nextGroupIndex++;
+        if (groupIndex >= groups.length) return;
 
-      } else if (result.uploaded === true) {
-        uploaded++;
+        const group = groups[groupIndex];
+        const groupNumber = groupIndex + 1;
 
-      } else {
-        throw new Error(
-          `The backend did not confirm whether ${file.name} was uploaded.`
-        );
+        try {
+          showStatus(
+            "upload-status",
+            `Preparing group ${groupNumber} of ${groups.length} (${group.length} photo(s))…`
+          );
+
+          const photos = await Promise.all(group.map(async (file) => ({
+            originalFilename: file.name,
+            mimeType: file.type,
+            fileSize: file.size,
+            base64Data: await fileToBase64(file)
+          })));
+
+          const result = await backendRequest({
+            action: "uploadPhotoBatch",
+            batchId: batchId,
+            consent: true,
+            photos: photos
+          });
+
+          if (
+            !Array.isArray(result.results) ||
+            result.results.length !== group.length
+          ) {
+            throw new Error(
+              `Group ${groupNumber} returned an invalid response. Check backend records before retrying.`
+            );
+          }
+
+          for (const item of result.results) {
+            if (
+              item.duplicate === true &&
+              item.success === true
+            ) {
+              duplicates++;
+
+            } else if (
+              item.uploaded === true &&
+              item.success === true
+            ) {
+              uploaded++;
+
+            } else {
+              throw new Error(
+                `Upload result for ${item.filename || "a photo"} was not confirmed: ` +
+                `${item.error || "check backend records before retrying."}`
+              );
+            }
+          }
+
+          completedGroups++;
+
+          showStatus(
+            "upload-status",
+            `Completed ${completedGroups} of ${groups.length} groups. ` +
+            `${uploaded} uploaded, ${duplicates} duplicates rejected.`
+          );
+
+        } catch (error) {
+          failure = error;
+          throw error;
+        }
       }
+    }
 
-      showStatus(
-        "upload-status",
-        `Processed ${i + 1} of ${images.length} images. ` +
-        `${uploaded} uploaded, ${duplicates} duplicates rejected.`
-      );
+    const workers = Array.from(
+      {
+        length: Math.min(
+          MAX_PARALLEL_GROUPS,
+          groups.length
+        )
+      },
+      () => uploadNextGroup()
+    );
+
+    const workerResults = await Promise.allSettled(workers);
+
+    const failedWorker = workerResults.find(
+      (item) => item.status === "rejected"
+    );
+
+    if (failedWorker) {
+      throw failedWorker.reason;
     }
 
     showStatus(
       "upload-status",
-      "Checking this attempt..."
+      "Checking this attempt…"
     );
 
     const finished = await backendRequest({
@@ -750,8 +813,11 @@ $("upload-button").addEventListener("click", async () => {
       batchId
     });
 
-    // Qualification is determined by the backend.
-    const count = Number(finished.newUniquePhotos);
+    // The server is the authority on qualification.
+    const count = Number(
+      finished.newUniquePhotos
+    );
+
     const qualifies = finished.qualifies === true;
 
     if (!Number.isFinite(count)) {
@@ -789,21 +855,14 @@ $("upload-button").addEventListener("click", async () => {
       `${error.message} Check backend records before retrying.`,
       true
     );
-
-  } finally {
+      } finally {
     setBusy(false);
     refreshUploadButton();
   }
 });
 
 // ============================================================
-// END OF PART 2
-// ======// ============================================================
-// PART 3: GALLERY REVEAL AND PRIVATE GALLERY
-// ============================================================
-
-// ============================================================
-// ONE-TIME GALLERY REVEAL
+// GALLERY REVEAL
 // ============================================================
 
 $("reveal-button").addEventListener("click", async () => {
@@ -815,12 +874,8 @@ $("reveal-button").addEventListener("click", async () => {
       "Please sign in first.",
       true
     );
-
     return;
   }
-
-  // SECURITY LOCK:
-  // Gallery access remains disabled until verification is complete.
 
   if (!ENABLE_REAL_UPLOADS) {
     showStatus(
@@ -828,17 +883,6 @@ $("reveal-button").addEventListener("click", async () => {
       "Gallery reveal is disabled until backend security and deployment are verified.",
       true
     );
-
-    return;
-  }
-
-  if (!$("consent").checked) {
-    showStatus(
-      "reveal-status",
-      "Please agree before revealing the gallery.",
-      true
-    );
-
     return;
   }
 
@@ -856,17 +900,11 @@ $("reveal-button").addEventListener("click", async () => {
       consent: true
     });
 
-    if (result.revealed !== true) {
-      throw new Error(
-        result.message || "Unable to unlock the gallery."
-      );
-    }
-
     showStatus(
       "reveal-status",
       result.alreadyRevealed
-        ? "Your gallery is already unlocked!"
-        : "Gallery unlocked successfully!"
+        ? "Your gallery is already unlocked."
+        : "Gallery unlocked successfully."
     );
 
     await loadGallery();
@@ -890,19 +928,14 @@ $("reveal-button").addEventListener("click", async () => {
 // ============================================================
 
 async function loadGallery() {
-  if (!auth.currentUser) {
-    showPanel("auth-panel");
-    return;
-  }
-
-  // Never request gallery data while the security lock is active.
+  if (!auth.currentUser) return;
 
   if (!ENABLE_REAL_UPLOADS) {
     showPanel("upload-panel");
 
     showStatus(
       "upload-status",
-      "Gallery access is disabled until the backend has been verified.",
+      "Gallery access is disabled until backend verification is complete.",
       true
     );
 
@@ -910,45 +943,30 @@ async function loadGallery() {
   }
 
   showPanel("gallery-panel");
-
-  const gallery = $("gallery");
-
-  if (!gallery) {
-    console.error("Gallery HTML element is missing.");
-    return;
-  }
-
-  gallery.replaceChildren();
+  $("gallery").replaceChildren();
 
   const loading = document.createElement("p");
-  loading.textContent = "Loading your private gallery...";
-
-  gallery.appendChild(loading);
+  loading.textContent = "Loading your private gallery…";
+  $("gallery").appendChild(loading);
 
   try {
     const result = await backendRequest({
       action: "listGallery"
     });
 
-    if (result.success !== true) {
-      throw new Error(
-        result.message || "Unable to load the gallery."
-      );
-    }
-
     const images = Array.isArray(result.images)
       ? result.images
       : [];
 
-    gallery.replaceChildren();
+    $("gallery").replaceChildren();
 
     if (images.length === 0) {
-      const emptyMessage = document.createElement("p");
+      const empty = document.createElement("p");
 
-      emptyMessage.textContent =
-        "The gallery is unlocked, but no photos were found.";
+      empty.textContent =
+        "The gallery is unlocked, but no pictures are available yet.";
 
-      gallery.appendChild(emptyMessage);
+      $("gallery").appendChild(empty);
 
       showStatus(
         "reveal-status",
@@ -958,42 +976,27 @@ async function loadGallery() {
       return;
     }
 
-    // Request each image through the authenticated backend.
     for (const item of images) {
       if (!item.id) continue;
 
-      const card = document.createElement("div");
-      card.className = "gallery-item";
-
+      const figure = document.createElement("figure");
       const image = document.createElement("img");
+      const caption = document.createElement("figcaption");
 
       image.alt = item.name || "Private gallery photo";
       image.loading = "lazy";
       image.decoding = "async";
 
-      const caption = document.createElement("p");
       caption.textContent = item.name || "Our memory";
 
-      card.appendChild(image);
-      card.appendChild(caption);
-
-      gallery.appendChild(card);
+      figure.append(image, caption);
+      $("gallery").appendChild(figure);
 
       try {
         const imageResult = await backendRequest({
           action: "getGalleryImage",
           fileId: item.id
         });
-
-        if (
-          imageResult.success !== true ||
-          typeof imageResult.base64 !== "string" ||
-          !imageResult.base64
-        ) {
-          throw new Error(
-            imageResult.message || "Unable to load this photo."
-          );
-        }
 
         const allowedMimeTypes = [
           "image/jpeg",
@@ -1008,32 +1011,40 @@ async function loadGallery() {
           ? imageResult.mimeType
           : "image/jpeg";
 
+        if (!imageResult.base64) {
+          throw new Error("No image data was returned.");
+        }
+
         image.src =
           `data:${mimeType};base64,${imageResult.base64}`;
 
-      } catch (imageError) {
+      } catch (error) {
         console.error(
-          "Unable to load gallery image:",
-          item.id,
-          imageError
+          "Gallery image load failed:",
+          item.name,
+          error
         );
 
-        image.remove();
-
-        caption.textContent =
-          `${item.name || "Photo"} could not be loaded.`;
+        figure.remove();
       }
+    }
+
+    if (!$("gallery").children.length) {
+      const message = document.createElement("p");
+
+      message.textContent =
+        "Gallery images could not be loaded. Please try again later.";
+
+      $("gallery").appendChild(message);
     }
 
     showStatus(
       "reveal-status",
-      "Your private gallery is ready!"
+      "Your private gallery is ready."
     );
 
   } catch (error) {
     console.error("Gallery loading error:", error);
-
-    gallery.replaceChildren();
 
     showStatus(
       "reveal-status",
@@ -1044,10 +1055,7 @@ async function loadGallery() {
 }
 
 // ============================================================
-// END OF PART 3
-// ============================================================
-// ============================================================
-// FINAL HTML ELEMENT CHECK
+// REQUIRED HTML ELEMENT CHECK
 // ============================================================
 
 const requiredIds = [
@@ -1077,7 +1085,6 @@ const requiredIds = [
   "reveal-button",
   "reveal-status",
   "gallery-panel",
-  "letter",
   "gallery"
 ];
 
@@ -1091,11 +1098,9 @@ if (missingIds.length > 0) {
     missingIds
   );
 } else {
-  console.log(
-    "All required HTML elements were found."
-  );
+  console.log("All required HTML elements were found.");
 }
 
 // ============================================================
-// END OF PART 4
+// END OF APP.JS
 // ============================================================
