@@ -411,7 +411,8 @@ async function loadGallery(preloadedImages = null) {
         const res = await backendRequest({ action: "getGalleryImage", fileId: item.id });
         img.src = `data:${res.mimeType};base64,${res.base64}`;
       } catch (err) {
-        caption.textContent = "Failed to load";
+        // This will print the exact Google error directly onto the screen!
+        caption.textContent = `Error: ${err.message}`;
         caption.style.color = "red";
       }
     }
