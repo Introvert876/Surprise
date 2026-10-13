@@ -1,278 +1,238 @@
-:root {
-  --primary-color: #d81b60;
-  --primary-hover: #ad1457;
-  --bg-color: #fce4ec;
-  --card-bg: rgba(255, 255, 255, 0.85);
-  --text-main: #333;
-  --text-muted: #666;
-  --border-radius: 16px;
-  --shadow: 0 8px 32px rgba(216, 27, 96, 0.1);
-}
-
+/* =========================================
+   GLOBAL RESET & FONTS
+   ========================================= */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: 'Poppins', sans-serif;
 }
 
 body {
-  background: var(--bg-color);
-  background-image: linear-gradient(135deg, #fce4ec 0%, #f8bbd0 100%);
-  color: var(--text-main);
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: linear-gradient(135deg, #ffe6eb 0%, #fec8d8 100%);
+  color: #333;
   min-height: 100vh;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
-  padding: 20px;
+  padding: 40px 20px;
 }
 
-.container {
-  max-width: 500px;
-  width: 100%;
-  z-index: 10;
-}
-
-.header {
+/* =========================================
+   HEADER STYLES
+   ========================================= */
+.header-container {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 30px;
+  max-width: 400px;
 }
 
-.eyebrow {
+.made-with-care {
   font-size: 0.8rem;
+  font-weight: 700;
+  color: #d81b60;
+  text-transform: uppercase;
   letter-spacing: 2px;
-  color: var(--primary-color);
-  font-weight: 600;
-  margin-bottom: 5px;
+  margin-bottom: 10px;
 }
 
-.header h1 {
+h1 {
   font-size: 2.2rem;
-  font-weight: 600;
+  font-weight: 800;
+  color: #333;
   line-height: 1.2;
+  margin-bottom: 15px;
 }
 
-.header h1 span {
-  color: var(--primary-color);
+h1 .highlight {
+  color: #d81b60;
 }
 
 .subtitle {
-  font-size: 0.95rem;
-  color: var(--text-muted);
-  margin-top: 10px;
+  font-size: 1rem;
+  color: #666;
+  line-height: 1.5;
 }
 
-.card {
-  background: var(--card-bg);
-  backdrop-filter: blur(10px);
-  border-radius: var(--border-radius);
+/* =========================================
+   MAIN CARD CONTAINER
+   ========================================= */
+.panel {
+  background-color: #ffffff;
+  border-radius: 24px;
   padding: 30px;
-  box-shadow: var(--shadow);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  transition: all 0.3s ease;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 10px 30px rgba(216, 27, 96, 0.1);
+  margin-bottom: 20px;
 }
 
+.panel h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 15px;
+  color: #222;
+}
+
+.panel p {
+  color: #555;
+  font-size: 0.95rem;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+/* =========================================
+   UTILITY CLASSES (Crucial for JS logic)
+   ========================================= */
 .hidden {
   display: none !important;
 }
 
-.tabs {
-  display: flex;
-  margin-bottom: 20px;
-  border-bottom: 2px solid #eee;
-}
-
-.tab {
-  flex: 1;
-  background: none;
-  border: none;
-  padding: 10px;
-  font-size: 1rem;
+.status-text {
+  font-size: 0.9rem;
   font-weight: 500;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: color 0.2s;
+  margin-top: 15px;
+  text-align: center;
 }
 
-.tab.active {
-  color: var(--primary-color);
-  border-bottom: 2px solid var(--primary-color);
-}
-
+/* =========================================
+   FORMS, INPUTS & BUTTONS
+   ========================================= */
 .input-group {
   margin-bottom: 15px;
-}
-
-.input-group label {
-  display: block;
-  font-size: 0.85rem;
-  font-weight: 500;
-  margin-bottom: 5px;
-  color: var(--text-muted);
-}
-
-.input-group input {
   width: 100%;
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+}
+
+input[type="email"],
+input[type="password"],
+input[type="text"] {
+  width: 100%;
+  padding: 14px;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 12px;
   font-size: 1rem;
-  transition: border-color 0.2s;
+  font-family: inherit;
+  transition: border-color 0.3s ease;
 }
 
-.input-group input:focus {
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="text"]:focus {
   outline: none;
-  border-color: var(--primary-color);
+  border-color: #d81b60;
 }
 
-.btn-primary {
-  background: var(--primary-color);
+button {
+  width: 100%;
+  padding: 14px;
+  background-color: #d81b60;
   color: white;
   border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 1rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--primary-hover);
-  transform: translateY(-1px);
-}
-
-.btn-primary:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-.full-width {
-  width: 100%;
-}
-
-.btn-text {
-  background: none;
-  border: none;
-  color: var(--primary-color);
-  font-weight: 500;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.action-group {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 20px;
-}
-
-.status-msg {
-  margin-top: 15px;
-  font-size: 0.9rem;
-  text-align: center;
-}
-
-.instruction-box {
-  background: rgba(216, 27, 96, 0.05);
-  padding: 15px;
-  border-radius: 8px;
-  margin: 15px 0;
-  border-left: 4px solid var(--primary-color);
-}
-
-.instruction-box h3 {
-  font-size: 1rem;
-  margin-bottom: 5px;
-}
-
-.instruction-box p {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.checkbox-container {
-  display: flex;
-  align-items: flex-start;
-  font-size: 0.85rem;
-  margin-bottom: 20px;
-  cursor: pointer;
-  color: var(--text-muted);
-}
-
-.checkbox-container input {
-  margin-right: 10px;
-  margin-top: 3px;
-}
-
-.file-upload-wrapper {
-  text-align: center;
-  margin-bottom: 20px;
-}
-
-input[type="file"] {
-  display: none;
-}
-
-.custom-file-upload {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 2px dashed var(--primary-color);
-  color: var(--primary-color);
-  padding: 12px 24px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: background 0.2s;
-  width: 100%;
-  justify-content: center;
-}
-
-.custom-file-upload:hover {
-  background: rgba(216, 27, 96, 0.05);
-}
-
-.summary-text {
-  font-size: 0.85rem;
-  color: var(--text-muted);
+  font-family: inherit;
+  transition: transform 0.1s, background-color 0.3s;
   margin-top: 10px;
 }
 
+button:active {
+  transform: scale(0.98);
+}
+
+button:disabled {
+  background-color: #f48fb1;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Navigation Links */
+.auth-links {
+  text-align: center;
+  margin-top: 15px;
+  font-size: 0.9rem;
+}
+
+.auth-links span {
+  color: #d81b60;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-links span:hover {
+  text-decoration: underline;
+}
+
+/* File Upload Specifics */
+input[type="file"] {
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+.checkbox-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 15px 0;
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.checkbox-group input {
+  margin-top: 3px;
+}
+
+/* =========================================
+   GALLERY GRID
+   ========================================= */
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 15px;
   margin-top: 20px;
 }
 
-.gallery-grid figure {
+figure {
   margin: 0;
-  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  background: #fdfdfd;
+  border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
 }
 
-.gallery-grid img {
+figure img {
   width: 100%;
   height: 150px;
   object-fit: cover;
-  display: block;
+  background-color: #f0f0f0; /* Placeholder color while loading */
 }
 
-.gallery-grid figcaption {
-  padding: 8px;
+figcaption {
+  padding: 10px;
   font-size: 0.8rem;
-  background: #fff;
   text-align: center;
-  color: var(--text-muted);
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.full-width-card {
-  max-width: 800px;
-  width: 90vw;
+/* =========================================
+   ANTI-SAVE PROTECTIONS
+   ========================================= */
+/* Prevents long-pressing, text highlighting, and dragging elements */
+img {
+  -webkit-touch-callout: none !important; 
+  -webkit-user-select: none !important;   
+  user-select: none !important;
+  pointer-events: none !important;        
 }
 
-.mt-4 {
-  margin-top: 20px;
+.gallery-grid {
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
 }
