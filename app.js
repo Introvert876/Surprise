@@ -42,7 +42,7 @@ const MAX_BATCH_FILES = 100;
 // Changing this to true does not make an insecure
 // backend safe.
 
-const ENABLE_REAL_UPLOADS = false;
+const ENABLE_REAL_UPLOADS = true;
 
 // ============================================================
 // INITIALIZE FIREBASE
