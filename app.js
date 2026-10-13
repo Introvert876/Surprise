@@ -183,10 +183,10 @@ async function routeSignedInUser() {
       await loadGallery();
     } else if (result.eligible) {
       showPanel("reveal-panel");
-      showStatus("reveal-status", "Your photo challenge is complete. You can reveal the gallery.");
+      showStatus("reveal-status", "Dare completed! You can now reveal the gallery.");
     } else {
       showPanel("upload-panel");
-      showStatus("upload-status", "Choose new photos to begin a new attempt.");
+      showStatus("upload-status", "Complete the dare to proceed.");
     }
   } catch (error) {
     showStatus("upload-status", "Could not verify backend status.", true);
@@ -365,7 +365,6 @@ $("upload-button").addEventListener("click", async () => {
 
 $("reveal-button").addEventListener("click", async () => {
   if (busy || !ENABLE_REAL_UPLOADS) return;
-  // Removed the 30-minute warning from the alert popup
   if (!window.confirm("Reveal the private gallery now? This will begin your secure viewing session.")) return;
 
   setBusy(true);
@@ -422,7 +421,6 @@ async function loadGallery(preloadedImages = null) {
       }
     }
     
-    // Removed the 30-minute warning from the final success text
     statusText.innerText = "All photos loaded successfully!";
     statusText.style.color = "#39764b";
 
