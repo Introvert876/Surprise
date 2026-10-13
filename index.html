@@ -3,111 +3,82 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>A Little World for Kirti ❤️</title>
-  
-  <!-- Modern Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
-  
-  <!-- Human AI Library -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/human/3.3.6/human.js"></script>
-  
+  <title>For Kirti ❤️</title>
   <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Human AI Library for Face Verification -->
+  <script src="https://cdn.jsdelivr.net/npm/@vladmandic/human/dist/human.js"></script>
 </head>
 <body>
 
-  <div class="background-shapes"></div>
+  <div class="header-container">
+    <div class="made-with-care">Made with care</div>
+    <h1>A little world for <span class="highlight">Kirti ❤️</span></h1>
+    <p class="subtitle">A small place for photos, memories, and a message made just for you.</p>
+  </div>
 
-  <main class="container">
-    <header class="header">
-      <p class="eyebrow">MADE WITH CARE</p>
-      <h1>A little world <br><span>for Kirti</span> ❤️</h1>
-      <p class="subtitle">A small place for photos, memories, and a message made just for you.</p>
-    </header>
-
-    <!-- AUTHENTICATION PANEL -->
-    <section id="auth-panel" class="card">
-      <div class="tabs">
-        <button id="show-login" class="tab active">Sign In</button>
-        <button id="show-register" class="tab">Create Account</button>
+  <!-- AUTH PANEL -->
+  <div id="auth-panel" class="panel">
+    <h2 id="auth-title">Welcome ❤️</h2>
+    <form id="auth-form">
+      <div id="name-wrap" class="input-group hidden">
+        <input type="text" id="display-name" placeholder="Your Name">
       </div>
-
-      <form id="auth-form" class="form-group">
-        <p id="auth-note" class="note">Sign in to continue to the private photo experience.</p>
-        
-        <div id="name-wrap" class="hidden input-group">
-          <label for="display-name">Display Name</label>
-          <input type="text" id="display-name" placeholder="How should we call you?">
-        </div>
-
-        <div class="input-group">
-          <label for="email">Email Address</label>
-          <input type="email" id="email" required placeholder="you@example.com">
-        </div>
-
-        <div class="input-group">
-          <label for="password">Password</label>
-          <input type="password" id="password" required placeholder="••••••••">
-        </div>
-
-        <div id="confirm-wrap" class="hidden input-group">
-          <label for="confirm-password">Confirm Password</label>
-          <input type="password" id="confirm-password" placeholder="••••••••">
-        </div>
-
-        <div class="action-group">
-          <button type="submit" id="auth-submit" class="btn-primary">Sign in ❤️</button>
-          <button type="button" id="reset-password" class="btn-text">Forgot password?</button>
-        </div>
-        <p id="auth-status" class="status-msg"></p>
-      </form>
-    </section>
-
-    <!-- UPLOAD PANEL -->
-    <section id="upload-panel" class="card hidden">
-      <div class="user-info">
-        <p>Signed in as: <span id="signed-in-as" class="highlight"></span></p>
-        <button id="sign-out" class="btn-text small">Sign Out</button>
+      <div class="input-group">
+        <input type="email" id="email" placeholder="Email address" required autocomplete="email">
       </div>
-
-      <div class="instruction-box">
-        <h3>Please read before continuing</h3>
-        <p>You must have to upload 30 or more photos . All photos must contain a face to unlock the gallery.</p>
+      <div class="input-group">
+        <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
       </div>
-
-      <label class="checkbox-container">
-        <input type="checkbox" id="consent">
-        <span class="checkmark"></span>
-        I understand and agree that the image files I select will be uploaded and retained.
-      </label>
-
-      <div class="file-upload-wrapper">
-        <label for="photos" class="custom-file-upload">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-          Choose Image Files
-        </label>
-        <input type="file" id="photos" multiple accept="image/*">
-        <p id="selection-summary" class="summary-text">No files selected.</p>
+      <div id="confirm-wrap" class="input-group hidden">
+        <!-- Changed autocomplete to "off" to stop random password suggestions -->
+        <input type="password" id="confirm-password" placeholder="Confirm password" autocomplete="off">
       </div>
+      <button type="submit" id="auth-submit">Sign in ❤️</button>
+      <p id="auth-status" class="status-text"></p>
+    </form>
+    <div class="auth-links">
+      <p>
+        <span id="show-login" class="active">Sign In</span> | 
+        <span id="show-register">Create Account</span>
+      </p>
+    </div>
+  </div>
 
-      <button id="upload-button" class="btn-primary full-width" disabled>Upload selected photos</button>
-      <p id="upload-status" class="status-msg"></p>
-    </section>
+  <!-- UPLOAD PANEL (THE DARE) -->
+  <div id="upload-panel" class="panel hidden">
+    <h2>Complete the Dare 😈</h2>
+    <p style="font-weight: 600; color: #d81b60; font-size: 1.1rem; text-align: center; margin-bottom: 20px;">
+      Want my photo? Then complete a dare: upload your 30 unique images!
+    </p>
+    <input type="file" id="photos" accept="image/*" multiple>
+    <p id="selection-summary" class="status-text">No files selected.</p>
+    <div class="checkbox-group">
+      <input type="checkbox" id="consent">
+      <label for="consent">I promise these are real photos of me.</label>
+    </div>
+    <button id="upload-button" disabled>Upload & Complete Dare</button>
+    <p id="upload-status" class="status-text"></p>
+  </div>
 
-    <!-- REVEAL PANEL -->
-    <section id="reveal-panel" class="card hidden">
-      <h2>Challenge Complete! 🎉</h2>
-      <p id="reveal-status" class="status-msg success">Your photos have been verified.</p>
-      <button id="reveal-button" class="btn-primary full-width mt-4">Reveal Private Gallery</button>
-    </section>
+  <!-- REVEAL PANEL -->
+  <div id="reveal-panel" class="panel hidden">
+    <h2>Your Private Gallery</h2>
+    <p style="text-align: center; margin-bottom: 20px;">Your photo challenge is complete!</p>
+    <button id="reveal-button">Reveal Private Gallery</button>
+    <p id="reveal-status" class="status-text"></p>
+  </div>
 
-    <!-- GALLERY PANEL -->
-    <section id="gallery-panel" class="card hidden full-width-card">
-      <h2>Your Private Gallery</h2>
-      <div id="gallery" class="gallery-grid"></div>
-    </section>
-  </main>
+  <!-- GALLERY PANEL -->
+  <div id="gallery-panel" class="panel hidden" style="max-width: 600px;">
+    <h2>Your Private Gallery</h2>
+    <div id="gallery"></div>
+  </div>
+
+  <div style="margin-top: 20px; text-align: center;">
+    <button id="sign-out" style="background: transparent; color: #d81b60; font-size: 0.9rem; border: none; width: auto; padding: 5px 10px;">Sign out</button>
+    <p id="signed-in-as" style="font-size: 0.8rem; color: #666; margin-top: 5px;"></p>
+  </div>
 
   <script type="module" src="app.js"></script>
 </body>
