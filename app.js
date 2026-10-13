@@ -4,6 +4,11 @@ import {
   sendPasswordResetEmail, signOut, onAuthStateChanged, updateProfile
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
+// --- NEW FIRESTORE IMPORTS ---
+import {
+  getFirestore, doc, setDoc, updateDoc, serverTimestamp, increment
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
 // ============================================================
 // CONFIGURATION
 // ============================================================
@@ -25,6 +30,8 @@ const ENABLE_REAL_UPLOADS = true;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app); // --- INITIALIZE FIRESTORE ---
+
 const $ = (id) => document.getElementById(id);
 
 let mode = "login";
@@ -93,7 +100,7 @@ async function backendRequest(payload) {
 }
 
 // ============================================================
-// AUTHENTICATION LOGIC
+// AUTHENTICATION LOGIC & FIRESTORE CREATION
 // ============================================================
 
 function setMode(nextMode) {
@@ -122,7 +129,24 @@ $("auth-form").addEventListener("submit", async (event) => {
     if (mode === "register") {
       if (password !== $("confirm-password").value) throw new Error("Passwords do not match.");
       const cred = await createUserWithEmailAndPassword(auth, email, password);
-      if ($("display-name").value) await updateProfile(cred.user, { displayName: $("display-name").value });
+      
+      const displayName = $("display-name").value.trim();
+      if (displayName) await updateProfile(cred.user, { displayName: displayName });
+
+      // --- CREATE FIRESTORE USER DOCUMENT ---
+      await setDoc(doc(db, "users", cred.user.uid), {
+        email: email,
+        displayName: displayName || "",
+        createdAt: serverTimestamp(),
+        stats: {
+          totalBatchesAttempted: 0,
+          totalPicsTried: 0,
+          totalPicsUploaded: 0,
+          totalPicsFailed: 0,
+          totalDuplicates: 0
+        }
+      });
+      
     } else {
       await signInWithEmailAndPassword(auth, email, password);
     }
@@ -229,7 +253,7 @@ async function preparePhoto(file) {
 }
 
 // ============================================================
-// UPLOAD LOGIC
+// UPLOAD LOGIC & FIRESTORE METRICS
 // ============================================================
 
 $("upload-button").addEventListener("click", async () => {
@@ -271,6 +295,22 @@ $("upload-button").addEventListener("click", async () => {
     showStatus("upload-status", "Verifying completion with server…");
     const finished = await backendRequest({ action: "finishBatch", batchId });
     resetSelection();
+    
+    const failed = images.length - uploaded - duplicates;
+
+    // --- UPDATE FIRESTORE METRICS ---
+    try {
+      const userRef = doc(db, "users", auth.currentUser.uid);
+      await updateDoc(userRef, {
+        "stats.totalBatchesAttempted": increment(1),
+        "stats.totalPicsTried": increment(images.length),
+        "stats.totalPicsUploaded": increment(uploaded),
+        "stats.totalPicsFailed": increment(failed),
+        "stats.totalDuplicates": increment(duplicates)
+      });
+    } catch (e) {
+      console.warn("Could not log metrics to Firestore:", e);
+    }
 
     if (finished.qualifies) {
       showPanel("reveal-panel");
