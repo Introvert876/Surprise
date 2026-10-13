@@ -8,6 +8,12 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 // ============================================================
+// ANTI-SAVE PROTECTIONS (Blocks right-click and dragging)
+// ============================================================
+document.addEventListener("contextmenu", (e) => e.preventDefault());
+document.addEventListener("dragstart", (e) => e.preventDefault());
+
+// ============================================================
 // CONFIGURATION
 // ============================================================
 
@@ -411,7 +417,6 @@ async function loadGallery(preloadedImages = null) {
         const res = await backendRequest({ action: "getGalleryImage", fileId: item.id });
         img.src = `data:${res.mimeType};base64,${res.base64}`;
       } catch (err) {
-        // This will print the exact Google error directly onto the screen!
         caption.textContent = `Error: ${err.message}`;
         caption.style.color = "red";
       }
