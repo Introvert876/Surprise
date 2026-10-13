@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 import {
   getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  sendPasswordResetEmail, signOut, onAuthStateChanged, updateProfile
+  signOut, onAuthStateChanged, updateProfile
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import {
   getFirestore, doc, setDoc, updateDoc, serverTimestamp, increment
@@ -381,7 +381,7 @@ async function loadGallery() {
     $("gallery").replaceChildren();
 
     if (!result.images || result.images.length === 0) {
-      $("gallery").innerHTML = "<p>Gallery unlocked, but no photos found.</p>";
+      $("gallery").innerHTML = "<p>Gallery unlocked, but no photos found in the Drive folder.</p>";
       return;
     }
 
@@ -399,6 +399,7 @@ async function loadGallery() {
         .catch(() => figure.remove());
     }
   } catch (error) {
-    showStatus("reveal-status", error.message, true);
+    // Show the error directly on the gallery screen so we can see what is failing
+    $("gallery").innerHTML = `<p style="color: #d81b60; text-align: center; font-weight: 500; margin-top: 20px;">Error: ${error.message}</p>`;
   }
 }
