@@ -18,7 +18,6 @@ body {
   padding: 40px 20px;
 }
 
-
 /* =========================================
    HEADER STYLES
    ========================================= */
@@ -164,9 +163,36 @@ button:disabled {
   text-decoration: underline;
 }
 
-input[type="file"] {
-  margin-bottom: 10px;
+/* =========================================
+   CUSTOM FILE UPLOAD STYLING
+   ========================================= */
+.hidden-file-input {
+  display: none;
+}
+
+.custom-file-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   width: 100%;
+  padding: 16px;
+  border: 2px dashed #d81b60;
+  border-radius: 12px;
+  color: #d81b60;
+  font-weight: 600;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.1s;
+  margin-bottom: 5px;
+}
+
+.custom-file-button:hover {
+  background-color: rgba(216, 27, 96, 0.05);
+}
+
+.custom-file-button:active {
+  transform: scale(0.98);
 }
 
 .checkbox-group {
@@ -206,7 +232,7 @@ figure {
 
 figure img {
   width: 100%;
-  height: 450px; /* Large, immersive image height */
+  height: 450px; 
   object-fit: cover;
   background-color: #111;
 }
