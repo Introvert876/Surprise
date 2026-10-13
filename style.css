@@ -82,7 +82,7 @@ h1 .highlight {
 }
 
 /* =========================================
-   UTILITY CLASSES (Crucial for JS logic)
+   UTILITY CLASSES
    ========================================= */
 .hidden {
   display: none !important;
@@ -147,7 +147,6 @@ button:disabled {
   transform: none;
 }
 
-/* Navigation Links */
 .auth-links {
   text-align: center;
   margin-top: 15px;
@@ -164,7 +163,6 @@ button:disabled {
   text-decoration: underline;
 }
 
-/* File Upload Specifics */
 input[type="file"] {
   margin-bottom: 10px;
   width: 100%;
@@ -184,12 +182,12 @@ input[type="file"] {
 }
 
 /* =========================================
-   GALLERY GRID
+   GALLERY GRID (Enlarged Container & Images)
    ========================================= */
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 15px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
   margin-top: 20px;
 }
 
@@ -198,21 +196,21 @@ figure {
   display: flex;
   flex-direction: column;
   background: #fdfdfd;
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  box-shadow: 0 6px 15px rgba(0,0,0,0.08);
 }
 
 figure img {
   width: 100%;
-  height: 150px;
+  height: 300px; /* Taller image container */
   object-fit: cover;
-  background-color: #f0f0f0; /* Placeholder color while loading */
+  background-color: #f0f0f0;
 }
 
 figcaption {
-  padding: 10px;
-  font-size: 0.8rem;
+  padding: 12px;
+  font-size: 0.85rem;
   text-align: center;
   color: #555;
   white-space: nowrap;
@@ -223,7 +221,6 @@ figcaption {
 /* =========================================
    ANTI-SAVE PROTECTIONS
    ========================================= */
-/* Prevents long-pressing, text highlighting, and dragging elements */
 img {
   -webkit-touch-callout: none !important; 
   -webkit-user-select: none !important;   
