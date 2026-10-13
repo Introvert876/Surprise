@@ -50,8 +50,22 @@
     <p style="font-weight: 600; color: #d81b60; font-size: 1.1rem; text-align: center; margin-bottom: 20px;">
       Want my photo? Then complete a dare: upload your 30 unique images!
     </p>
-    <input type="file" id="photos" accept="image/*" multiple>
-    <p id="selection-summary" class="status-text">No files selected.</p>
+    
+    <!-- NEW CUSTOM FILE UPLOAD CONTAINER -->
+    <div class="file-upload-wrapper">
+      <input type="file" id="photos" accept="image/*" multiple class="hidden-file-input">
+      <label for="photos" class="custom-file-button">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        Choose Image Files
+      </label>
+    </div>
+    
+    <p id="selection-summary" class="status-text" style="margin-top: 5px;">No files selected.</p>
+    
     <div class="checkbox-group">
       <input type="checkbox" id="consent">
       <label for="consent">I promise these are real photos of me.</label>
@@ -68,7 +82,7 @@
     <p id="reveal-status" class="status-text"></p>
   </div>
 
-  <!-- GALLERY PANEL (Expanded width to 900px) -->
+  <!-- GALLERY PANEL -->
   <div id="gallery-panel" class="panel hidden" style="max-width: 900px; width: 100%;">
     <h2>Your Private Gallery</h2>
     <div id="gallery"></div>
