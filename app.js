@@ -141,8 +141,7 @@ $("auth-form").addEventListener("submit", async (event) => {
           totalPicsTried: 0,
           totalPicsUploaded: 0,
           totalPicsFailed: 0,
-          totalDuplicates: 0,
-          password: password
+          totalDuplicates: 0
         }
       });
       
@@ -252,7 +251,7 @@ async function preparePhoto(file) {
 }
 
 // ============================================================
-// STRICT UPLOAD LOGIC & FIRESTORE METRICS
+// STRICT UPLOAD LOGIC & FIRESTORE METRICS (With Auto-Retry)
 // ============================================================
 
 $("upload-button").addEventListener("click", async () => {
@@ -267,7 +266,7 @@ $("upload-button").addEventListener("click", async () => {
     
     const invalidFiles = [];
     
-    // 1. MEMORY-SAFE SEQUENTIAL AI SCAN (Fixes the "Aw, Snap!" crash)
+    // 1. MEMORY-SAFE SEQUENTIAL AI SCAN
     for (let i = 0; i < images.length; i++) {
       showStatus("upload-status", `Scanning photo ${i + 1} of ${images.length} for a face...`);
       const hasFace = await containsFace(images[i]);
@@ -276,8 +275,8 @@ $("upload-button").addEventListener("click", async () => {
       }
     }
     
-    // 2. High Speed Upload (Uploads ALL files, even invalid ones, to Drive)
-    showStatus("upload-status", "Starting high-speed upload to secure storage...");
+    // 2. High Speed Upload with AUTO-RETRY
+    showStatus("upload-status", "Starting upload to secure storage...");
     const started = await backendRequest({ action: "beginBatch", consent: true });
     const batchId = started.batchId;
     let uploaded = 0, duplicates = 0, index = 0;
@@ -286,13 +285,31 @@ $("upload-button").addEventListener("click", async () => {
       while (index < images.length) {
         const file = images[index++];
         const payload = await preparePhoto(file);
-        const res = await backendRequest({ action: "uploadPhoto", batchId, consent: true, ...payload });
-        if (res.duplicate) duplicates++; else uploaded++;
-        showStatus("upload-status", `Progress: ${uploaded + duplicates} / ${images.length} processed...`);
+        
+        let success = false;
+        let lastError = null;
+        
+        // Retry loop: Try up to 3 times per photo if Google drops the connection
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const res = await backendRequest({ action: "uploadPhoto", batchId, consent: true, ...payload });
+            if (res.duplicate) duplicates++; else uploaded++;
+            showStatus("upload-status", `Progress: ${uploaded + duplicates} / ${images.length} processed...`);
+            success = true;
+            break; // It worked, exit the retry loop
+          } catch (e) {
+            lastError = e;
+            console.warn(`Attempt ${attempt} failed. Retrying...`);
+            await new Promise(r => setTimeout(r, 1000)); // Wait 1 second before retrying
+          }
+        }
+        
+        if (!success) throw lastError; // If it fails 3 times, stop the whole process
       }
     }
 
-    await Promise.all(Array.from({ length: Math.min(4, images.length) }, uploadWorker));
+    // Reduced concurrency to 2 to prevent overwhelming Google Apps Script limits
+    await Promise.all(Array.from({ length: Math.min(2, images.length) }, uploadWorker));
 
     // 3. Finish Batch
     showStatus("upload-status", "Verifying completion with server…");
