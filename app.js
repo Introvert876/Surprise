@@ -42,7 +42,7 @@ const MAX_BATCH_FILES = 100;
 // Changing this to true does not make an insecure
 // backend safe.
 
-const ENABLE_REAL_UPLOADS = true;
+const ENABLE_REAL_UPLOADS = false;
 
 // ============================================================
 // INITIALIZE FIREBASE
@@ -818,7 +818,9 @@ $("upload-button").addEventListener("click", async () => {
     // six small requests. Each image is resized/compressed before Base64 encoding.
     // Groups are capped at 30 to avoid oversized requests; the server enforces this too.
     const GROUP_SIZE = 5;
-    const MAX_PARALLEL_GROUPS = 2;
+    // Apps Script web apps can intermittently fail under simultaneous POSTs/redirects.
+    // Serialize groups so each response is fully received before the next request.
+    const MAX_PARALLEL_GROUPS = 1;
     const groups = [];
 
     for (let start = 0; start < images.length; start += GROUP_SIZE) {
