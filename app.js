@@ -155,23 +155,44 @@ async function backendRequest(payload) {
 
   const idToken = await auth.currentUser.getIdToken();
 
-  let response;
+const requestStartedAt = performance.now();
+
+let response;
 
   try {
-    response = await fetch(BACKEND_URL, {
-      method: "POST",
+    const requestBody = JSON.stringify({
+  ...payload,
+  idToken
+});
 
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8"
-      },
+const payloadSizeKB = Math.round(
+  new Blob([requestBody]).size / 1024
+);
 
-      body: JSON.stringify({
-        ...payload,
-        idToken
-      }),
+console.log("[TIMING] Request started:", {
+  action: payload.action,
+  payloadSizeKB
+});
 
-      redirect: "follow"
-    });
+response = await fetch(BACKEND_URL, {
+  method: "POST",
+
+  headers: {
+    "Content-Type": "text/plain;charset=utf-8"
+  },
+
+  body: requestBody,
+
+  redirect: "follow"
+});
+
+console.log("[TIMING] Request response received:", {
+  action: payload.action,
+  elapsedMs: Math.round(
+    performance.now() - requestStartedAt
+  ),
+  httpStatus: response.status
+});
   } catch (error) {
     console.error("Backend network error:", error);
 
@@ -561,9 +582,12 @@ $("consent").addEventListener("change", () => {
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
+    const startedAt = performance.now();
     const reader = new FileReader();
 
     reader.onerror = () => {
+      console.error("[TIMING] Base64 read failed:", file.name);
+
       reject(
         new Error(`Could not read ${file.name}.`)
       );
@@ -577,17 +601,27 @@ function fileToBase64(file) {
         reject(
           new Error(`Could not encode ${file.name}.`)
         );
-
         return;
       }
 
-      resolve(value.slice(comma + 1));
+      const base64 = value.slice(comma + 1);
+      const elapsedMs = performance.now() - startedAt;
+
+      console.log("[TIMING] Base64 conversion:", {
+        filename: file.name,
+        originalSizeKB: Math.round(file.size / 1024),
+        base64SizeKB: Math.round(
+          (base64.length * 3) / 4 / 1024
+        ),
+        elapsedMs: Math.round(elapsedMs)
+      });
+
+      resolve(base64);
     };
 
     reader.readAsDataURL(file);
   });
 }
-
 // ============================================================
 // UPLOAD SELECTED PHOTOS
 // ============================================================
