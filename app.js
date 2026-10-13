@@ -147,8 +147,7 @@ $("auth-form").addEventListener("submit", async (event) => {
           totalPicsTried: 0,
           totalPicsUploaded: 0,
           totalPicsFailed: 0,
-          totalDuplicates: 0,
-          password: password
+          totalDuplicates: 0
         }
       });
       
@@ -365,11 +364,11 @@ $("upload-button").addEventListener("click", async () => {
 
 $("reveal-button").addEventListener("click", async () => {
   if (busy || !ENABLE_REAL_UPLOADS) return;
-  if (!window.confirm("Reveal the private gallery now? You will have 30 minutes to view it before it locks again.")) return;
+  // Removed the 30-minute warning from the alert popup
+  if (!window.confirm("Reveal the private gallery now? This will begin your secure viewing session.")) return;
 
   setBusy(true);
   try {
-    // Unlocks AND returns the photo list all at once
     const result = await backendRequest({ action: "revealGallery", consent: true });
     await loadGallery(result.images); 
   } catch (error) {
@@ -386,7 +385,6 @@ async function loadGallery(preloadedImages = null) {
   try {
     let images = preloadedImages;
     
-    // If refreshing the page, fetch the list normally
     if (!images) {
       const result = await backendRequest({ action: "listGallery" });
       images = result.images;
@@ -423,7 +421,8 @@ async function loadGallery(preloadedImages = null) {
       }
     }
     
-    statusText.innerText = "All photos loaded successfully! (Session expires in 30 mins)";
+    // Removed the 30-minute warning from the final success text
+    statusText.innerText = "All photos loaded successfully!";
     statusText.style.color = "#39764b";
 
   } catch (error) {
