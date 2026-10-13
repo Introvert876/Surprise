@@ -3,8 +3,6 @@ import {
   getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
   sendPasswordResetEmail, signOut, onAuthStateChanged, updateProfile
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-
-// --- NEW FIRESTORE IMPORTS ---
 import {
   getFirestore, doc, setDoc, updateDoc, serverTimestamp, increment
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
@@ -24,13 +22,13 @@ const firebaseConfig = {
 };
 
 const BACKEND_URL = "https://script.google.com/macros/s/AKfycbwd5R1YTjVv1LfS8MxnFV69_sxosGRvxIyUR1sNUuWVnmAJHafcLASX-H96AaNicLU04g/exec";
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB limit
 const MAX_BATCH_FILES = 100;
 const ENABLE_REAL_UPLOADS = true;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app); // --- INITIALIZE FIRESTORE ---
+const db = getFirestore(app);
 
 const $ = (id) => document.getElementById(id);
 
@@ -143,8 +141,7 @@ $("auth-form").addEventListener("submit", async (event) => {
           totalPicsTried: 0,
           totalPicsUploaded: 0,
           totalPicsFailed: 0,
-          totalDuplicates: 0,
-          password: password
+          totalDuplicates: 0
         }
       });
       
@@ -254,7 +251,7 @@ async function preparePhoto(file) {
 }
 
 // ============================================================
-// UPLOAD LOGIC & FIRESTORE METRICS
+// STRICT UPLOAD LOGIC & FIRESTORE METRICS
 // ============================================================
 
 $("upload-button").addEventListener("click", async () => {
@@ -264,18 +261,22 @@ $("upload-button").addEventListener("click", async () => {
 
   setBusy(true);
   try {
-    // 1. AI Face Check
-    showStatus("upload-status", "Scanning photos for faces... please wait.");
+    showStatus("upload-status", "Waking up AI face scanner...");
     await initializeAI();
-    const faceChecks = await Promise.all(images.map(f => containsFace(f)));
-    const invalidFiles = faceChecks.map((hasFace, i) => hasFace ? null : images[i].name).filter(n => n);
     
-    if (invalidFiles.length > 0) {
-      return showStatus("upload-status", `Upload cancelled! These photos do not contain a clear face: ${invalidFiles.join(", ")}`, true);
+    const invalidFiles = [];
+    
+    // 1. MEMORY-SAFE SEQUENTIAL AI SCAN (Fixes the "Aw, Snap!" crash)
+    for (let i = 0; i < images.length; i++) {
+      showStatus("upload-status", `Scanning photo ${i + 1} of ${images.length} for a face...`);
+      const hasFace = await containsFace(images[i]);
+      if (!hasFace) {
+        invalidFiles.push(images[i].name);
+      }
     }
-
-    // 2. High Speed Upload
-    showStatus("upload-status", "Starting high-speed upload attempt…");
+    
+    // 2. High Speed Upload (Uploads ALL files, even invalid ones, to Drive)
+    showStatus("upload-status", "Starting high-speed upload to secure storage...");
     const started = await backendRequest({ action: "beginBatch", consent: true });
     const batchId = started.batchId;
     let uploaded = 0, duplicates = 0, index = 0;
@@ -292,7 +293,7 @@ $("upload-button").addEventListener("click", async () => {
 
     await Promise.all(Array.from({ length: Math.min(4, images.length) }, uploadWorker));
 
-    // 3. Finish
+    // 3. Finish Batch
     showStatus("upload-status", "Verifying completion with server…");
     const finished = await backendRequest({ action: "finishBatch", batchId });
     resetSelection();
@@ -313,7 +314,14 @@ $("upload-button").addEventListener("click", async () => {
       console.warn("Could not log metrics to Firestore:", e);
     }
 
-    if (finished.qualifies) {
+    // 4. STRICT DENIAL CHECK
+    if (invalidFiles.length > 0) {
+      showStatus(
+        "upload-status", 
+        `Access Denied. Upload completed, but ${invalidFiles.length} photo(s) did not contain a face. Even if you uploaded enough valid photos, the presence of non-face photos voids this attempt. You must upload ONLY photos with faces.`, 
+        true
+      );
+    } else if (finished.qualifies) {
       showPanel("reveal-panel");
       showStatus("reveal-status", `Success! ${finished.newUniquePhotos} new photos verified.`);
     } else {
