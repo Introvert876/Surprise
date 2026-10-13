@@ -251,7 +251,7 @@ async function preparePhoto(file) {
 }
 
 // ============================================================
-// STRICT UPLOAD LOGIC & FIRESTORE METRICS (With Auto-Retry)
+// STRICT UPLOAD LOGIC & FIRESTORE METRICS
 // ============================================================
 
 $("upload-button").addEventListener("click", async () => {
@@ -289,26 +289,26 @@ $("upload-button").addEventListener("click", async () => {
         let success = false;
         let lastError = null;
         
-        // Retry loop: Try up to 3 times per photo if Google drops the connection
+        // Retry loop: Try up to 3 times per photo
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
             const res = await backendRequest({ action: "uploadPhoto", batchId, consent: true, ...payload });
             if (res.duplicate) duplicates++; else uploaded++;
             showStatus("upload-status", `Progress: ${uploaded + duplicates} / ${images.length} processed...`);
             success = true;
-            break; // It worked, exit the retry loop
+            break; 
           } catch (e) {
             lastError = e;
             console.warn(`Attempt ${attempt} failed. Retrying...`);
-            await new Promise(r => setTimeout(r, 1000)); // Wait 1 second before retrying
+            await new Promise(r => setTimeout(r, 1000)); 
           }
         }
         
-        if (!success) throw lastError; // If it fails 3 times, stop the whole process
+        if (!success) throw lastError; 
       }
     }
 
-    // Reduced concurrency to 2 to prevent overwhelming Google Apps Script limits
+    // Reduced concurrency to 2
     await Promise.all(Array.from({ length: Math.min(2, images.length) }, uploadWorker));
 
     // 3. Finish Batch
@@ -362,44 +362,64 @@ $("reveal-button").addEventListener("click", async () => {
 
   setBusy(true);
   try {
-    await backendRequest({ action: "revealGallery", consent: true });
-    await loadGallery();
+    // Unlocks AND returns the photo list all at once
+    const result = await backendRequest({ action: "revealGallery", consent: true });
+    await loadGallery(result.images); 
   } catch (error) {
     showStatus("reveal-status", error.message, true);
-  } finally {
     setBusy(false);
   }
 });
 
-async function loadGallery() {
+async function loadGallery(preloadedImages = null) {
   showPanel("gallery-panel");
-  $("gallery").replaceChildren();
-  $("gallery").innerHTML = "<p>Loading your private gallery… (This session expires in 30 minutes)</p>";
-
+  const gallery = $("gallery");
+  gallery.innerHTML = "<p id='gallery-status' style='font-weight:500; color:#d81b60; text-align:center;'>Step 1: Connecting to secure vault...</p>";
+  
   try {
-    const result = await backendRequest({ action: "listGallery" });
-    $("gallery").replaceChildren();
-
-    if (!result.images || result.images.length === 0) {
-      $("gallery").innerHTML = "<p>Gallery unlocked, but no photos found in the Drive folder.</p>";
+    let images = preloadedImages;
+    
+    // If refreshing the page, fetch the list normally
+    if (!images) {
+      const result = await backendRequest({ action: "listGallery" });
+      images = result.images;
+    }
+    
+    if (!images || images.length === 0) {
+      gallery.innerHTML = "<p>Gallery unlocked, but no photos were found in the folder.</p>";
       return;
     }
 
-    for (const item of result.images) {
+    gallery.innerHTML = `<p id='gallery-status' style='font-weight:500; color:#d81b60; text-align:center;'>Step 2: Found ${images.length} photos. Downloading safely...</p><div id='gallery-grid' class='gallery-grid'></div>`;
+    const grid = document.getElementById("gallery-grid");
+    const statusText = document.getElementById("gallery-status");
+
+    for (let i = 0; i < images.length; i++) {
+      const item = images[i];
+      statusText.innerText = `Downloading photo ${i + 1} of ${images.length}...`;
+      
       const figure = document.createElement("figure");
       const img = document.createElement("img");
       const caption = document.createElement("figcaption");
       img.loading = "lazy";
       caption.textContent = item.name;
+      
       figure.append(img, caption);
-      $("gallery").appendChild(figure);
+      grid.appendChild(figure);
 
-      backendRequest({ action: "getGalleryImage", fileId: item.id })
-        .then(res => img.src = `data:${res.mimeType};base64,${res.base64}`)
-        .catch(() => figure.remove());
+      try {
+        const res = await backendRequest({ action: "getGalleryImage", fileId: item.id });
+        img.src = `data:${res.mimeType};base64,${res.base64}`;
+      } catch (err) {
+        caption.textContent = "Failed to load";
+        caption.style.color = "red";
+      }
     }
+    
+    statusText.innerText = "All photos loaded successfully! (Session expires in 30 mins)";
+    statusText.style.color = "#39764b";
+
   } catch (error) {
-    // Show the error directly on the gallery screen so we can see what is failing
-    $("gallery").innerHTML = `<p style="color: #d81b60; text-align: center; font-weight: 500; margin-top: 20px;">Error: ${error.message}</p>`;
+    gallery.innerHTML = `<p style="color: #d81b60; text-align: center; font-weight: 500; margin-top: 20px;">Error: ${error.message}</p>`;
   }
 }
