@@ -182,13 +182,14 @@ input[type="file"] {
 }
 
 /* =========================================
-   GALLERY GRID (Enlarged Container & Images)
+   GALLERY GRID (Large Single-Column Feed)
    ========================================= */
 .gallery-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
   margin-top: 20px;
+  width: 100%;
 }
 
 figure {
@@ -198,24 +199,26 @@ figure {
   background: #fdfdfd;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 6px 15px rgba(0,0,0,0.08);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+  width: 100%;
 }
 
 figure img {
   width: 100%;
-  height: 300px; /* Taller image container */
+  height: 450px; /* Large, immersive image height */
   object-fit: cover;
-  background-color: #f0f0f0;
+  background-color: #111;
 }
 
 figcaption {
-  padding: 12px;
-  font-size: 0.85rem;
+  padding: 14px;
+  font-size: 0.9rem;
   text-align: center;
   color: #555;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  background: #fff;
 }
 
 /* =========================================
