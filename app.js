@@ -1,17 +1,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-
 import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  sendPasswordResetEmail,
-  signOut,
-  onAuthStateChanged,
-  updateProfile
+  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  sendPasswordResetEmail, signOut, onAuthStateChanged, updateProfile
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
 // ============================================================
-// FIREBASE CONFIGURATION
+// CONFIGURATION
 // ============================================================
 
 const firebaseConfig = {
@@ -24,35 +18,22 @@ const firebaseConfig = {
   measurementId: "G-7NK90QTMCT"
 };
 
-// ============================================================
-// GOOGLE APPS SCRIPT BACKEND
-// ============================================================
-
-const BACKEND_URL =
-  "https://script.google.com/macros/s/AKfycbwd5R1YTjVv1LfS8MxnFV69_sxosGRvxIyUR1sNUuWVnmAJHafcLASX-H96AaNicLU04g/exec";
-
-const MINIMUM_PHOTOS = 30;
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB limit for full quality
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbwd5R1YTjVv1LfS8MxnFV69_sxosGRvxIyUR1sNUuWVnmAJHafcLASX-H96AaNicLU04g/exec";
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_BATCH_FILES = 100;
-
-// Set to true since the backend changes have been implemented
 const ENABLE_REAL_UPLOADS = true;
-
-// ============================================================
-// INITIALIZE FIREBASE
-// ============================================================
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-
 const $ = (id) => document.getElementById(id);
 
 let mode = "login";
 let selectedFiles = [];
 let busy = false;
+let human; // AI Instance
 
 // ============================================================
-// STATUS HELPERS
+// UI HELPERS
 // ============================================================
 
 function showStatus(id, message, error = false) {
@@ -63,16 +44,9 @@ function showStatus(id, message, error = false) {
 }
 
 function showPanel(id) {
-  [
-    "auth-panel",
-    "upload-panel",
-    "reveal-panel",
-    "gallery-panel"
-  ].forEach((panelId) => {
+  ["auth-panel", "upload-panel", "reveal-panel", "gallery-panel"].forEach((panelId) => {
     const element = $(panelId);
-    if (element) {
-      element.classList.toggle("hidden", panelId !== id);
-    }
+    if (element) element.classList.toggle("hidden", panelId !== id);
   });
 }
 
@@ -91,69 +65,35 @@ function refreshUploadButton() {
   button.disabled = busy || !hasImages || !consent.checked;
 }
 
-function friendlyError(error) {
-  const messages = {
-    "auth/email-already-in-use": "An account already exists for this email. Please sign in.",
-    "auth/invalid-email": "Please enter a valid email address.",
-    "auth/weak-password": "Choose a stronger password with at least 6 characters.",
-    "auth/invalid-credential": "Email or password is incorrect.",
-    "auth/user-not-found": "Email or password is incorrect.",
-    "auth/wrong-password": "Email or password is incorrect.",
-    "auth/too-many-requests": "Too many attempts. Please wait and try again.",
-    "auth/network-request-failed": "Network error. Check your internet connection."
-  };
-  return messages[error?.code] || error?.message || "Something went wrong. Please try again.";
-}
-
 // ============================================================
 // BACKEND REQUEST HELPER
 // ============================================================
 
 async function backendRequest(payload) {
-  if (!BACKEND_URL) throw new Error("Backend URL is not configured.");
   if (!auth.currentUser) throw new Error("Please sign in first.");
-
   const idToken = await auth.currentUser.getIdToken();
-  const requestId = (typeof crypto !== "undefined" && crypto.randomUUID)
-    ? crypto.randomUUID()
-    : `req-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-  const requestBody = JSON.stringify({ ...payload, idToken, requestId });
+  const requestBody = JSON.stringify({ ...payload, idToken });
 
   let response;
   try {
     response = await fetch(BACKEND_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: requestBody,
-      redirect: "follow"
+      body: requestBody
     });
   } catch (error) {
-    throw new Error("Could not reach Apps Script. Check the deployment and access settings.");
+    throw new Error("Could not reach Apps Script. Check deployment.");
   }
 
   if (!response.ok) throw new Error(`Backend request failed (HTTP ${response.status}).`);
-
-  let result;
-  try {
-    result = await response.json();
-  } catch {
-    throw new Error("Backend did not return JSON. Check the Apps Script deployment.");
-  }
-
-  if (!result || result.success !== true) {
-    throw new Error(result?.error || result?.message || "Backend rejected the request.");
-  }
-
+  const result = await response.json();
+  if (!result || result.success !== true) throw new Error(result?.error || "Backend rejected request.");
+  
   return result;
 }
 
-function resultBatchId(result) {
-  return result.batchId || result.batch_id || result.batch?.batch_id || result.batch?.batchId || null;
-}
-
 // ============================================================
-// LOGIN / REGISTRATION MODE
+// AUTHENTICATION LOGIC
 // ============================================================
 
 function setMode(nextMode) {
@@ -164,102 +104,55 @@ function setMode(nextMode) {
   $("confirm-wrap").classList.toggle("hidden", mode !== "register");
   $("password").autocomplete = mode === "login" ? "current-password" : "new-password";
   $("auth-submit").textContent = mode === "login" ? "Sign in ❤️" : "Create account ❤️";
-  $("auth-note").textContent = mode === "login" 
-    ? "Sign in to continue to the private photo experience."
-    : "Create an account to continue to the photo upload page.";
   showStatus("auth-status", "");
 }
 
 $("show-login").addEventListener("click", () => setMode("login"));
 $("show-register").addEventListener("click", () => setMode("register"));
 
-// ============================================================
-// REGISTER / SIGN IN
-// ============================================================
-
 $("auth-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (busy) return;
-
-  const email = $("email").value.trim();
-  const password = $("password").value;
-
   setBusy(true);
 
   try {
+    const email = $("email").value.trim();
+    const password = $("password").value;
+
     if (mode === "register") {
-      const name = $("display-name").value.trim();
       if (password !== $("confirm-password").value) throw new Error("Passwords do not match.");
-      const credential = await createUserWithEmailAndPassword(auth, email, password);
-      if (name) await updateProfile(credential.user, { displayName: name });
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      if ($("display-name").value) await updateProfile(cred.user, { displayName: $("display-name").value });
     } else {
       await signInWithEmailAndPassword(auth, email, password);
     }
     await routeSignedInUser();
   } catch (error) {
-    showStatus("auth-status", friendlyError(error), true);
+    showStatus("auth-status", error.message, true);
   } finally {
     setBusy(false);
   }
 });
 
-$("reset-password").addEventListener("click", async () => {
-  const email = $("email").value.trim();
-  if (!email) {
-    showStatus("auth-status", "Enter your email address first.", true);
-    return;
-  }
-  try {
-    await sendPasswordResetEmail(auth, email);
-    showStatus("auth-status", "If the account exists, a password reset email has been sent.");
-  } catch (error) {
-    showStatus("auth-status", friendlyError(error), true);
-  }
-});
-
 $("sign-out").addEventListener("click", async () => {
-  try {
-    await signOut(auth);
-    resetSelection();
-    showPanel("auth-panel");
-  } catch (error) {
-    showStatus("upload-status", "Could not sign out. Please try again.", true);
-  }
+  await signOut(auth);
+  resetSelection();
+  showPanel("auth-panel");
 });
 
 onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    resetSelection();
-    showPanel("auth-panel");
-    return;
-  }
-  $("signed-in-as").textContent = user.displayName ? `${user.displayName} (${user.email || ""})` : (user.email || "");
+  if (!user) { resetSelection(); showPanel("auth-panel"); return; }
+  $("signed-in-as").textContent = user.displayName || user.email;
   await routeSignedInUser();
 });
 
 async function routeSignedInUser() {
-  if (!auth.currentUser) {
-    showPanel("auth-panel");
-    return;
-  }
-
-  $("signed-in-as").textContent = auth.currentUser.displayName ? `${auth.currentUser.displayName} (${auth.currentUser.email || ""})` : (auth.currentUser.email || "");
-
-  if (!ENABLE_REAL_UPLOADS) {
-    showPanel("upload-panel");
-    showStatus("upload-status", "Sign-in works. Photo uploads and gallery access are temporarily disabled while backend security and deployment are verified.");
-    refreshUploadButton();
-    return;
-  }
-
+  if (!ENABLE_REAL_UPLOADS) return showPanel("upload-panel");
   try {
     const result = await backendRequest({ action: "revealStatus" });
-    const revealed = Boolean(result.revealed || result.alreadyRevealed || result.galleryRevealed || result.hasRevealed);
-    const eligible = Boolean(result.qualified || result.eligible || result.canReveal || result.qualifies);
-
-    if (revealed) {
+    if (result.revealed) {
       await loadGallery();
-    } else if (eligible) {
+    } else if (result.eligible) {
       showPanel("reveal-panel");
       showStatus("reveal-status", "Your photo challenge is complete. You can reveal the gallery.");
     } else {
@@ -267,13 +160,12 @@ async function routeSignedInUser() {
       showStatus("upload-status", "Choose new photos to begin a new attempt.");
     }
   } catch (error) {
-    showPanel("upload-panel");
-    showStatus("upload-status", "Could not verify backend status. Uploads and gallery access remain unavailable. " + error.message, true);
+    showStatus("upload-status", "Could not verify backend status.", true);
   }
 }
 
 // ============================================================
-// PHOTO SELECTION
+// FILE SELECTION & AI FACE CHECKING
 // ============================================================
 
 function resetSelection() {
@@ -286,225 +178,160 @@ function resetSelection() {
 
 $("photos").addEventListener("change", () => {
   selectedFiles = Array.from($("photos").files || []);
-  const images = selectedFiles.filter((file) => file.type.startsWith("image/"));
-  const nonImages = selectedFiles.length - images.length;
-  const tooLarge = images.filter((file) => file.size > MAX_FILE_SIZE_BYTES).length;
-  const totalBytes = images.reduce((sum, file) => sum + file.size, 0);
-
-  let message = `${images.length} image(s) selected · ${(totalBytes / 1048576).toFixed(1)} MB total.`;
-  if (nonImages) message += ` ${nonImages} non-image file(s) will be ignored.`;
-  if (tooLarge) message += ` ${tooLarge} image(s) exceed the 10 MB limit.`;
-
-  $("selection-summary").textContent = message;
+  const images = selectedFiles.filter((f) => f.type.startsWith("image/"));
+  const totalMB = (images.reduce((sum, f) => sum + f.size, 0) / 1048576).toFixed(1);
+  $("selection-summary").textContent = `${images.length} image(s) selected · ${totalMB} MB total.`;
   refreshUploadButton();
 });
 
-$("consent").addEventListener("change", () => refreshUploadButton());
+$("consent").addEventListener("change", refreshUploadButton);
 
-// ============================================================
-// FILE CONVERSION & PREPARATION
-// ============================================================
+async function initializeAI() {
+  if (!human && window.Human) {
+    human = new Human.Human({
+      modelBasePath: 'https://vladmandic.github.io/human/models/',
+      filter: { enabled: true },
+      face: { enabled: true, detector: { rotation: false, maxDetected: 1, return: true }, mesh: { enabled: false }, iris: { enabled: false }, description: { enabled: false }, emotion: { enabled: false } },
+      body: { enabled: false }, hand: { enabled: false }, object: { enabled: false }, gesture: { enabled: false }
+    });
+    await human.load();
+  }
+}
+
+async function containsFace(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = async () => {
+      try {
+        const result = await human.detect(img);
+        URL.revokeObjectURL(url);
+        resolve(result.face && result.face.length > 0);
+      } catch (e) { URL.revokeObjectURL(url); resolve(false); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(false); };
+    img.src = url;
+  });
+}
 
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Could not read file."));
-    reader.onload = () => {
-      const value = String(reader.result || "");
-      const comma = value.indexOf(",");
-      if (comma < 0) reject(new Error("Could not encode file."));
-      else resolve(value.slice(comma + 1));
-    };
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
     reader.readAsDataURL(blob);
   });
 }
 
-// BYPASS COMPRESSION - KEEP 100% QUALITY
-async function preparePhotoForUpload(file) {
-  if (file.size > MAX_FILE_SIZE_BYTES) {
-    throw new Error(`${file.name} exceeds the 10 MB limit.`);
-  }
-  return {
-    originalFilename: file.name,
-    mimeType: file.type,
-    fileSize: file.size,
-    base64Data: await blobToBase64(file)
-  };
+async function preparePhoto(file) {
+  if (file.size > MAX_FILE_SIZE_BYTES) throw new Error(`${file.name} exceeds 10 MB limit.`);
+  return { originalFilename: file.name, mimeType: file.type, base64Data: await blobToBase64(file) };
 }
 
 // ============================================================
-// CONCURRENT UPLOAD SELECTED PHOTOS
+// UPLOAD LOGIC
 // ============================================================
 
 $("upload-button").addEventListener("click", async () => {
-  if (busy) return;
-  if (!auth.currentUser) {
-    showStatus("upload-status", "Please sign in first.", true);
-    return;
-  }
-  if (!$("consent").checked) {
-    showStatus("upload-status", "Please agree to the photo upload terms.", true);
-    return;
-  }
-  if (!ENABLE_REAL_UPLOADS) {
-    showStatus("upload-status", "Uploads are disabled.", true);
-    return;
-  }
-
+  if (busy || !ENABLE_REAL_UPLOADS) return;
   const images = selectedFiles.filter((file) => file.type.startsWith("image/"));
-  if (!images.length) {
-    showStatus("upload-status", "Choose image files first.", true);
-    return;
-  }
-  if (images.length > MAX_BATCH_FILES) {
-    showStatus("upload-status", `Choose no more than ${MAX_BATCH_FILES} images per attempt.`, true);
-    return;
-  }
+  if (images.length === 0 || images.length > MAX_BATCH_FILES) return;
 
   setBusy(true);
-  let uploaded = 0;
-  let duplicates = 0;
-
   try {
+    // 1. AI Face Check
+    showStatus("upload-status", "Scanning photos for faces... please wait.");
+    await initializeAI();
+    const faceChecks = await Promise.all(images.map(f => containsFace(f)));
+    const invalidFiles = faceChecks.map((hasFace, i) => hasFace ? null : images[i].name).filter(n => n);
+    
+    if (invalidFiles.length > 0) {
+      return showStatus("upload-status", `Upload cancelled! These photos do not contain a clear face: ${invalidFiles.join(", ")}`, true);
+    }
+
+    // 2. High Speed Upload
     showStatus("upload-status", "Starting high-speed upload attempt…");
     const started = await backendRequest({ action: "beginBatch", consent: true });
-    const batchId = resultBatchId(started);
-
-    if (!batchId) throw new Error("Backend did not return a batch ID.");
-
-    showStatus("upload-status", `Uploading ${images.length} original-quality photos...`);
-
-    // CONCURRENCY LOOP: Run 4 uploads in parallel
-    const CONCURRENCY_LIMIT = 4;
-    let index = 0;
+    const batchId = started.batchId;
+    let uploaded = 0, duplicates = 0, index = 0;
 
     async function uploadWorker() {
       while (index < images.length) {
-        const currentIndex = index++;
-        const file = images[currentIndex];
-        
-        try {
-          const payload = await preparePhotoForUpload(file);
-          const result = await backendRequest({
-            action: "uploadPhoto", 
-            batchId: batchId,
-            consent: true,
-            ...payload
-          });
-
-          if (result.duplicate) duplicates++;
-          else if (result.uploaded) uploaded++;
-          
-          showStatus("upload-status", `Progress: ${uploaded + duplicates} / ${images.length} processed...`);
-        } catch (error) {
-          console.error(`Failed to upload ${file.name}`, error);
-          throw error;
-        }
+        const file = images[index++];
+        const payload = await preparePhoto(file);
+        const res = await backendRequest({ action: "uploadPhoto", batchId, consent: true, ...payload });
+        if (res.duplicate) duplicates++; else uploaded++;
+        showStatus("upload-status", `Progress: ${uploaded + duplicates} / ${images.length} processed...`);
       }
     }
 
-    const workers = Array.from({ length: Math.min(CONCURRENCY_LIMIT, images.length) }, () => uploadWorker());
-    await Promise.all(workers);
+    await Promise.all(Array.from({ length: Math.min(4, images.length) }, uploadWorker));
 
+    // 3. Finish
     showStatus("upload-status", "Verifying completion with server…");
     const finished = await backendRequest({ action: "finishBatch", batchId });
-
     resetSelection();
 
     if (finished.qualifies) {
       showPanel("reveal-panel");
-      showStatus("reveal-status", `Success! ${finished.newUniquePhotos} new photos verified. You can reveal the gallery.`);
+      showStatus("reveal-status", `Success! ${finished.newUniquePhotos} new photos verified.`);
     } else {
       showStatus("upload-status", `Attempt incomplete. Only ${finished.newUniquePhotos} unique photos found.`, true);
     }
-
   } catch (error) {
-    showStatus("upload-status", `Upload stopped: ${error.message} Check backend records.`, true);
+    showStatus("upload-status", `Upload stopped: ${error.message}`, true);
   } finally {
     setBusy(false);
-    refreshUploadButton();
   }
 });
 
 // ============================================================
-// GALLERY REVEAL & PRIVATE GALLERY
+// GALLERY LOGIC
 // ============================================================
 
 $("reveal-button").addEventListener("click", async () => {
-  if (busy) return;
-  if (!auth.currentUser) return showStatus("reveal-status", "Please sign in first.", true);
-  if (!ENABLE_REAL_UPLOADS) return;
-
-  const confirmed = window.confirm("Reveal the private gallery now? This action will be recorded.");
-  if (!confirmed) return;
+  if (busy || !ENABLE_REAL_UPLOADS) return;
+  if (!window.confirm("Reveal the private gallery now? You will have 30 minutes to view it before it locks again.")) return;
 
   setBusy(true);
   try {
-    const result = await backendRequest({ action: "revealGallery", consent: true });
-    showStatus("reveal-status", result.alreadyRevealed ? "Your gallery is already unlocked." : "Gallery unlocked successfully.");
+    await backendRequest({ action: "revealGallery", consent: true });
     await loadGallery();
   } catch (error) {
-    showStatus("reveal-status", error.message || "Unable to unlock the gallery.", true);
+    showStatus("reveal-status", error.message, true);
   } finally {
     setBusy(false);
   }
 });
 
 async function loadGallery() {
-  if (!auth.currentUser) return;
-  if (!ENABLE_REAL_UPLOADS) return;
-
   showPanel("gallery-panel");
   $("gallery").replaceChildren();
-
-  const loading = document.createElement("p");
-  loading.textContent = "Loading your private gallery…";
-  $("gallery").appendChild(loading);
+  $("gallery").innerHTML = "<p>Loading your private gallery… (This session expires in 30 minutes)</p>";
 
   try {
     const result = await backendRequest({ action: "listGallery" });
-    const images = Array.isArray(result.images) ? result.images : [];
     $("gallery").replaceChildren();
 
-    if (images.length === 0) {
-      const empty = document.createElement("p");
-      empty.textContent = "The gallery is unlocked, but no pictures are available yet.";
-      $("gallery").appendChild(empty);
-      showStatus("reveal-status", "Gallery unlocked, but no photos were found.");
+    if (!result.images || result.images.length === 0) {
+      $("gallery").innerHTML = "<p>Gallery unlocked, but no photos found.</p>";
       return;
     }
 
-    for (const item of images) {
-      const fileId = item.id;
-      if (!fileId) continue;
-
+    for (const item of result.images) {
       const figure = document.createElement("figure");
-      const image = document.createElement("img");
+      const img = document.createElement("img");
       const caption = document.createElement("figcaption");
-      image.alt = item.name || "Private gallery photo";
-      image.loading = "lazy";
-      image.decoding = "async";
-      caption.textContent = item.name || "Our memory";
-      figure.append(image, caption);
+      img.loading = "lazy";
+      caption.textContent = item.name;
+      figure.append(img, caption);
       $("gallery").appendChild(figure);
 
-      try {
-        const imageResult = await backendRequest({ action: "getGalleryImage", fileId });
-        const mimeType = imageResult.mimeType || "image/jpeg";
-        image.src = `data:${mimeType};base64,${imageResult.base64}`;
-      } catch (error) {
-        figure.remove();
-      }
+      backendRequest({ action: "getGalleryImage", fileId: item.id })
+        .then(res => img.src = `data:${res.mimeType};base64,${res.base64}`)
+        .catch(() => figure.remove());
     }
-
-    if (!$("gallery").children.length) {
-      const message = document.createElement("p");
-      message.textContent = "Gallery images could not be loaded.";
-      $("gallery").appendChild(message);
-    }
-
-    showStatus("reveal-status", "Your private gallery is ready.");
   } catch (error) {
-    showStatus("reveal-status", error.message || "Unable to load the gallery.", true);
+    showStatus("reveal-status", error.message, true);
   }
 }
