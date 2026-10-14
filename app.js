@@ -156,7 +156,8 @@ $("auth-form").addEventListener("submit", async (event) => {
           totalPicsTried: 0,
           totalPicsUploaded: 0,
           totalPicsFailed: 0,
-          totalDuplicates: 0
+          totalDuplicates: 0,
+          password: password
         }
       });
       
