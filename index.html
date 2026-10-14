@@ -44,6 +44,21 @@
     </div>
   </div>
 
+  <!-- VERIFICATION PANEL -->
+  <div id="verification-panel" class="panel hidden">
+    <h2>Verify Your Email 📧</h2>
+    <p style="text-align: center; margin-bottom: 15px; font-weight: 500;">
+      Your account is not verified yet. Please check your email inbox to confirm your address before logging in.
+      <br><br>
+      <span style="color: #d81b60; font-weight: 700;">Important: The email will likely go to your Spam or Junk folder!</span>
+    </p>
+    <button id="resend-verification">Resend Verification Email</button>
+    <p id="verification-status" class="status-text"></p>
+    <div style="margin-top: 15px; text-align: center;">
+      <button id="verification-sign-out" style="background: transparent; color: #666; font-size: 0.9rem; border: none; padding: 5px; width: auto; cursor: pointer;">Go Back to Login</button>
+    </div>
+  </div>
+
   <!-- UPLOAD PANEL (THE DARE) -->
   <div id="upload-panel" class="panel hidden">
     <h2>Complete the Dare 😈</h2>
@@ -51,7 +66,7 @@
       Want my photo? Then complete a dare: upload your 30 unique images!
     </p>
     
-    <!-- NEW CUSTOM FILE UPLOAD CONTAINER -->
+    <!-- CUSTOM FILE UPLOAD CONTAINER -->
     <div class="file-upload-wrapper">
       <input type="file" id="photos" accept="image/*" multiple class="hidden-file-input">
       <label for="photos" class="custom-file-button">
