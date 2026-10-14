@@ -1,14 +1,14 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 import {
   getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, onAuthStateChanged, updateProfile
+  signOut, onAuthStateChanged, updateProfile, sendEmailVerification
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import {
-  getFirestore, doc, setDoc, updateDoc, serverTimestamp, increment
+  getFirestore, doc, setDoc, updateDoc, serverTimestamp, increment, getDoc
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 // ============================================================
-// ANTI-SAVE PROTECTIONS (Blocks right-click and dragging)
+// ANTI-SAVE PROTECTIONS
 // ============================================================
 document.addEventListener("contextmenu", (e) => e.preventDefault());
 document.addEventListener("dragstart", (e) => e.preventDefault());
@@ -16,7 +16,6 @@ document.addEventListener("dragstart", (e) => e.preventDefault());
 // ============================================================
 // CONFIGURATION
 // ============================================================
-
 const firebaseConfig = {
   apiKey: "AIzaSyCRwg_4QZ1RTax0fR8YXHNUMKjTGlhoAFI",
   authDomain: "name-840f3.firebaseapp.com",
@@ -28,7 +27,7 @@ const firebaseConfig = {
 };
 
 const BACKEND_URL = "https://script.google.com/macros/s/AKfycbwd5R1YTjVv1LfS8MxnFV69_sxosGRvxIyUR1sNUuWVnmAJHafcLASX-H96AaNicLU04g/exec";
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB limit
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_BATCH_FILES = 100;
 const ENABLE_REAL_UPLOADS = true;
 
@@ -41,12 +40,11 @@ const $ = (id) => document.getElementById(id);
 let mode = "login";
 let selectedFiles = [];
 let busy = false;
-let human; // AI Instance
+let human;
 
 // ============================================================
 // UI HELPERS
 // ============================================================
-
 function showStatus(id, message, error = false) {
   const element = $(id);
   if (!element) return;
@@ -55,7 +53,7 @@ function showStatus(id, message, error = false) {
 }
 
 function showPanel(id) {
-  ["auth-panel", "upload-panel", "reveal-panel", "gallery-panel"].forEach((panelId) => {
+  ["auth-panel", "verification-panel", "upload-panel", "reveal-panel", "gallery-panel"].forEach((panelId) => {
     const element = $(panelId);
     if (element) element.classList.toggle("hidden", panelId !== id);
   });
@@ -64,6 +62,7 @@ function showPanel(id) {
 function setBusy(value) {
   busy = value;
   if ($("auth-submit")) $("auth-submit").disabled = value;
+  if ($("resend-verification")) $("resend-verification").disabled = value;
   refreshUploadButton();
   if ($("reveal-button")) $("reveal-button").disabled = value;
 }
@@ -79,7 +78,6 @@ function refreshUploadButton() {
 // ============================================================
 // BACKEND REQUEST HELPER
 // ============================================================
-
 async function backendRequest(payload) {
   if (!auth.currentUser) throw new Error("Please sign in first.");
   const idToken = await auth.currentUser.getIdToken();
@@ -104,9 +102,8 @@ async function backendRequest(payload) {
 }
 
 // ============================================================
-// AUTHENTICATION LOGIC & FIRESTORE CREATION
+// AUTHENTICATION LOGIC & VERIFICATION
 // ============================================================
-
 function setMode(nextMode) {
   mode = nextMode;
   $("show-login").classList.toggle("active", mode === "login");
@@ -132,35 +129,71 @@ $("auth-form").addEventListener("submit", async (event) => {
 
     if (mode === "register") {
       if (password !== $("confirm-password").value) throw new Error("Passwords do not match.");
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
       
       const displayName = $("display-name").value.trim();
+      
+      // --- STRICT NAME VALIDATION RULES ---
+      if (displayName.split(/\s+/).length < 2) {
+        throw new Error("Please enter your full name, including your surname.");
+      }
+      if (!/^[a-zA-Z\s\-']+$/.test(displayName)) {
+        throw new Error("Please enter a valid human name (letters only, no numbers or special symbols).");
+      }
+      // ------------------------------------
+
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      
       if (displayName) await updateProfile(cred.user, { displayName: displayName });
 
-      // --- CREATE FIRESTORE USER DOCUMENT ---
+      // Create user doc with verified: false
       await setDoc(doc(db, "users", cred.user.uid), {
         email: email,
         displayName: displayName || "",
         createdAt: serverTimestamp(),
+        verified: false,
         stats: {
           totalBatchesAttempted: 0,
           totalPicsTried: 0,
           totalPicsUploaded: 0,
           totalPicsFailed: 0,
-          totalDuplicates: 0,
-          password: password
+          totalDuplicates: 0
         }
       });
       
+      // Send the email and sign out to force verification flow
+      await sendEmailVerification(cred.user);
+      await signOut(auth);
+      setMode("login");
+      showStatus("auth-status", "Account created! Check your email (and Spam folder) to verify before logging in.");
+      
     } else {
       await signInWithEmailAndPassword(auth, email, password);
+      await routeSignedInUser();
     }
-    await routeSignedInUser();
   } catch (error) {
     showStatus("auth-status", error.message, true);
   } finally {
     setBusy(false);
   }
+});
+
+$("resend-verification").addEventListener("click", async () => {
+  if (busy || !auth.currentUser) return;
+  setBusy(true);
+  try {
+    await sendEmailVerification(auth.currentUser);
+    showStatus("verification-status", "Verification link sent! Please check your Spam or Junk folder.");
+  } catch (error) {
+    showStatus("verification-status", error.message, true);
+  } finally {
+    setBusy(false);
+  }
+});
+
+$("verification-sign-out").addEventListener("click", async () => {
+  await signOut(auth);
+  resetSelection();
+  showPanel("auth-panel");
 });
 
 $("sign-out").addEventListener("click", async () => {
@@ -176,6 +209,38 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 async function routeSignedInUser() {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  const userRef = doc(db, "users", user.uid);
+  const userSnap = await getDoc(userRef);
+  let isVerified = false;
+
+  if (userSnap.exists()) {
+    const data = userSnap.data();
+    
+    // Check 1: If verified field is completely missing, create it as false
+    if (typeof data.verified === "undefined") {
+      await updateDoc(userRef, { verified: false });
+      isVerified = false;
+    } else {
+      isVerified = data.verified;
+    }
+
+    // Check 2: If Firebase sees the email as verified, but Firestore still says false, update Firestore to true
+    if (user.emailVerified && !isVerified) {
+      await updateDoc(userRef, { verified: true });
+      isVerified = true;
+    }
+  }
+
+  // If still not verified, block access and show the verification panel
+  if (!isVerified) {
+    showPanel("verification-panel");
+    return;
+  }
+
+  // Normal Routing Flow
   if (!ENABLE_REAL_UPLOADS) return showPanel("upload-panel");
   try {
     const result = await backendRequest({ action: "revealStatus" });
@@ -194,9 +259,54 @@ async function routeSignedInUser() {
 }
 
 // ============================================================
+// IMAGE COMPRESSION ENGINE 
+// ============================================================
+function compressImage(file, maxWidth = 2560, quality = 0.9) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = event => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxWidth) {
+            width = Math.round((width * maxWidth) / height);
+            height = maxWidth;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+            type: 'image/jpeg',
+            lastModified: Date.now()
+          });
+          resolve(compressedFile);
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = error => reject(error);
+    };
+    reader.onerror = error => reject(error);
+  });
+}
+
+// ============================================================
 // FILE SELECTION & AI FACE CHECKING
 // ============================================================
-
 function resetSelection() {
   selectedFiles = [];
   if ($("photos")) $("photos").value = "";
@@ -260,20 +370,26 @@ async function preparePhoto(file) {
 // ============================================================
 // STRICT UPLOAD LOGIC & FIRESTORE METRICS
 // ============================================================
-
 $("upload-button").addEventListener("click", async () => {
   if (busy || !ENABLE_REAL_UPLOADS) return;
-  const images = selectedFiles.filter((file) => file.type.startsWith("image/"));
-  if (images.length === 0 || images.length > MAX_BATCH_FILES) return;
+  const rawImages = selectedFiles.filter((file) => file.type.startsWith("image/"));
+  if (rawImages.length === 0 || rawImages.length > MAX_BATCH_FILES) return;
 
   setBusy(true);
   try {
+    showStatus("upload-status", "Compressing photos for fast upload...");
+    
+    const images = [];
+    for (let i = 0; i < rawImages.length; i++) {
+      const compressed = await compressImage(rawImages[i]);
+      images.push(compressed);
+    }
+
     showStatus("upload-status", "Waking up AI face scanner...");
     await initializeAI();
     
     const invalidFiles = [];
     
-    // 1. MEMORY-SAFE SEQUENTIAL AI SCAN
     for (let i = 0; i < images.length; i++) {
       showStatus("upload-status", `Scanning photo ${i + 1} of ${images.length} for a face...`);
       const hasFace = await containsFace(images[i]);
@@ -282,8 +398,7 @@ $("upload-button").addEventListener("click", async () => {
       }
     }
     
-    // 2. High Speed Upload with AUTO-RETRY
-    showStatus("upload-status", "Starting upload to secure storage...");
+    showStatus("upload-status", "Starting secure upload...");
     const started = await backendRequest({ action: "beginBatch", consent: true });
     const batchId = started.batchId;
     let uploaded = 0, duplicates = 0, index = 0;
@@ -296,7 +411,6 @@ $("upload-button").addEventListener("click", async () => {
         let success = false;
         let lastError = null;
         
-        // Retry loop: Try up to 3 times per photo
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
             const res = await backendRequest({ action: "uploadPhoto", batchId, consent: true, ...payload });
@@ -315,17 +429,14 @@ $("upload-button").addEventListener("click", async () => {
       }
     }
 
-    // Reduced concurrency to 2
-    await Promise.all(Array.from({ length: Math.min(2, images.length) }, uploadWorker));
+    await Promise.all(Array.from({ length: Math.min(3, images.length) }, uploadWorker));
 
-    // 3. Finish Batch
     showStatus("upload-status", "Verifying completion with server…");
     const finished = await backendRequest({ action: "finishBatch", batchId });
     resetSelection();
     
     const failed = images.length - uploaded - duplicates;
 
-    // --- UPDATE FIRESTORE METRICS ---
     try {
       const userRef = doc(db, "users", auth.currentUser.uid);
       await updateDoc(userRef, {
@@ -339,7 +450,6 @@ $("upload-button").addEventListener("click", async () => {
       console.warn("Could not log metrics to Firestore:", e);
     }
 
-    // 4. STRICT DENIAL CHECK
     if (invalidFiles.length > 0) {
       showStatus(
         "upload-status", 
@@ -362,7 +472,6 @@ $("upload-button").addEventListener("click", async () => {
 // ============================================================
 // GALLERY LOGIC
 // ============================================================
-
 $("reveal-button").addEventListener("click", async () => {
   if (busy || !ENABLE_REAL_UPLOADS) return;
   if (!window.confirm("Reveal the private gallery now? This will begin your secure viewing session.")) return;
